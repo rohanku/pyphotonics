@@ -1,0 +1,83 @@
+Ansys Lumerical 2021 R2.5 Variational FDTD Solver Version 7.18.2885 (Windows 64bit)
+ expires (month/day/year): Permanent
+using config file: Ansys Licensing set with ANSYSLMD_LICENSE_FILE
+license host: 1055@pinnacledesktop.eecs.berkeley.edu
+current time: Wed Feb 23 23:32:16 2022
+Running on host: DESKTOP-JPL9TM9
+All processes are communicating and ready to proceed to simulation...
+Running lms file: C:\Program Files\Lumerical\v212\bin\varfdtd-engine-msmpi.exe -t 1 -remote C:/Users/rohan/optics_lib/lumerical/python/slab_right_bend.lms
+Starting meshing
+Simulation size in gridpoints: 1 x 22 x 1
+Refined 0 mesh cells (0%)
+Completed meshing!
+Meshing complete in 0 seconds of CPU time
+Starting meshing
+Simulation size in gridpoints: 1 x 22 x 1
+Refined 0 mesh cells (0%)
+Completed meshing!
+Meshing complete in 0 seconds of CPU time
+Starting meshing
+Simulation size in gridpoints: 1 x 22 x 1
+Refined 0 mesh cells (0%)
+Completed meshing!
+Meshing complete in 0 seconds of CPU time
+number of processors is 6
+processors are distributed as: 2x3x1
+Running TE Simulation
+Starting meshing
+Simulation size in gridpoints: 47 x 32 x 1
+Refined 0 mesh cells (0%)
+Completed meshing!
+Meshing complete in 0 seconds of CPU time
+0 0
+Starting meshing
+Simulation size in gridpoints: 47 x 32 x 1
+Refined 0 mesh cells (0%)
+Completed meshing!
+Meshing complete in 0 seconds of CPU time
+0 0
+finished material properties
+Selected kernel with optimization level: 0 and split-field propagation direction: 0
+-----------------------------------------
+Beginning initialization of TE Simulation
+Starting to add sources to simulation
+Adding TE Mode Source propagating in X
+Starting to add boundary conditions to simulation
+Adding TE PML BC
+Adding TE parallel BC
+Adding TE PML BC
+Adding TE parallel BC
+Starting to add monitors to Simulation
+Adding analysis monitor
+Adding TE DFT monitor
+Finished initialization of TE Simulation
+-----------------------------------------
+All processes are communicating and ready to proceed to simulation...
+Starting 8455 total iterations
+1% complete. Max time remaining: 1 secs. Auto Shutoff: 1
+1% complete. Max time remaining: 1 secs. Auto Shutoff: 1
+3% complete. Max time remaining: 1 secs. Auto Shutoff: 1
+6% complete. Max time remaining: 1 secs. Auto Shutoff: 1
+12% complete. Max time remaining: 0 secs. Auto Shutoff: 1
+24% complete. Max time remaining: 0 secs. Auto Shutoff: 1
+28% complete. Max time remaining: 0 secs. Auto Shutoff: 9.48174e-06
+Early termination of simulation, the autoshutoff criteria are satisfied.
+Completed 2332 iterations, or 2.75805e-13s of Simulation Time
+Process 0 starting to collect data
+    collecting monitor data
+    collecting source data
+Finished collecting data
+1504
+
+2332
+
+0.139072
+
+Simulation completed successfully at: Wed Feb 23 23:32:16 2022
+Overall wall time measurements in seconds: 18.4734
+    time to mesh and initialize: 0.0121436
+    time to run FDTD simulation: 0.139072
+    time to finalize data and save to files: 0.0093947
+    miscellaneous time: 18.3127
+    FDTD solver speed on process 0: 25.2194 Mnodes/s
+    total FDTD solver speed on 6 processes: 151.317 Mnodes/s
