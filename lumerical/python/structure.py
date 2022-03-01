@@ -1,4 +1,3 @@
-wavelength = 1.762e-6
 substrate_s = 1.5e-3
 substrate_t = 725e-6
 box_t = 2e-6
@@ -8,7 +7,7 @@ tox_t = 1e-6
 
 def addsoi(sim):
     """
-    Set up SOI material stack in provided simulation and returns the corresponding layers.
+    Set up SOI material stack in provided simulation and returns the corresponding layers. Takes the simulation object as a parameter.
     """
 
     # Create substrate
