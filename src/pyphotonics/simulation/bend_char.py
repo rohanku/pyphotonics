@@ -5,6 +5,7 @@ import numpy as np
 import os, string, random
 import matplotlib.pyplot as plt
 from scipy.constants import c
+import signal, multiprocessing
 
 lumapi = lumerical.lumapi
 
@@ -15,7 +16,8 @@ def soi_characterize_bend_varfdtd(
     angle,
     wavelength,
     interactive=False,
-    io_buffer=10,
+    sim_time=2000e-15,
+    io_buffer=3,
     mesh_buffer=None,
 ):
     """
@@ -40,6 +42,9 @@ def soi_characterize_bend_varfdtd(
         interactive (bool):
             Interactive mode opens the created simulation for inspection before running
 
+        sim_time (double):
+            Simulation time in seconds
+
         io_buffer (double):
             Spacing between bend and the input source/output monitor relative to wavelength
 
@@ -58,32 +63,29 @@ def soi_characterize_bend_varfdtd(
     if not 0 <= angle <= 180:
         raise TypeError("Angle must be between 0 and 180.")
 
+    # Compute necessary dimensions
+    angle_rad = np.radians(angle)
+
+    sim_x_min = radius * (1 - np.cos(angle_rad)) - io_buffer * wavelength * (np.sin(angle_rad) + 1) - width * np.cos(angle_rad)
+    sim_y_min = -2 * io_buffer * wavelength
+    sim_x_max = io_buffer * wavelength + radius
+    sim_y_max = radius * np.sin(angle_rad) + io_buffer * wavelength * (np.cos(angle_rad) + 1) + width * np.sin(angle_rad)
+    sim_x = (sim_x_min + sim_x_max)/2
+    sim_y = (sim_y_min + sim_y_max)/2
+    sim_diag = ((sim_x_max - sim_x_min)**2 + (sim_y_max - sim_y_min)**2)**(1/2)
+
+    input_wg_len = sim_diag
+    input_wg_x = radius * np.cos(angle_rad) - input_wg_len * np.sin(angle_rad) / 2
+    input_wg_y = radius * np.sin(angle_rad) + input_wg_len * np.cos(angle_rad) / 2
+
+    # Set up mode source on input waveguide
+    source_x = radius * np.cos(angle_rad) - io_buffer * wavelength * np.sin(angle_rad)
+    source_y = radius * np.sin(angle_rad) + io_buffer * wavelength * np.cos(angle_rad)
+
     print("Starting Lumerical session...")
     with lumapi.MODE(hide=not interactive) as mode:
         print("Setting up simulation...")
 
-        # Compute necessary dimensions
-        angle_rad = np.radians(angle)
-
-        sim_x_min = 1 - radius * np.cos(angle_rad) - 2 * io_buffer * wavelength * np.sin(angle_rad) - width * np.cos(angle_rad)
-        sim_y_min = -2 * io_buffer * wavelength
-        sim_x_max = io_buffer * wavelength + radius
-        sim_y_max = radius * np.sin(angle_rad) + 2 * io_buffer * wavelength * np.cos(angle_rad) + width * np.sin(angle_rad)
-        sim_diag = ((sim_x_max - sim_x_min)**2 + (sim_y_max - sim_y_min)**2)**(1/2)
-
-        sim_time = (2*sim_diag + radius * angle_rad)/c
-
-        input_wg_len = sim_diag
-        input_wg_x = radius * np.cos(angle_rad) - input_wg_len * np.sin(angle_rad) / 2
-        input_wg_y = radius * np.sin(angle_rad) + input_wg_len * np.cos(angle_rad) / 2
-
-        # Set up mode source on input waveguide
-        source_x = radius * np.cos(angle_rad) - (
-            io_buffer
-        ) * wavelength * np.sin(angle_rad)
-        source_y = radius * np.sin(angle_rad) + (
-            io_buffer
-        ) * wavelength * np.cos(angle_rad)
 
         # Set up simulation
         varfdtd = mode.addvarfdtd(
@@ -93,15 +95,15 @@ def soi_characterize_bend_varfdtd(
             y_max=sim_y_max,
             z=soi.si_t / 2,
             z_span=10 * soi.si_t,
-            x0=radius,
-            y0=-radius / 2,
+            x0=radius - sim_x,
+            y0=-radius / 2 - sim_y,
             simulation_wavelength_min=wavelength,
             simulation_wavelength_max=wavelength,
             simulation_time=sim_time,
         )
 
         # Set up substrate, BOX, device layer, and TOX
-        soi.addsoi(mode)
+        soi.setup(mode)
 
         # If the angle is nonzero, we need to add a bend
         if angle != 0:
@@ -222,7 +224,7 @@ def soi_characterize_bend_varfdtd(
             z_span=10 * soi.si_t,
         )
 
-        print("Saving and running simulation...")
+        print("Saving simulation file...")
         # Create temporary simulation folder and wait for user input before running if interactive
         os.makedirs("/tmp/optics_lib/bend_char", exist_ok=True)
         tag = "".join(random.choice(string.ascii_letters) for i in range(10))
@@ -231,6 +233,8 @@ def soi_characterize_bend_varfdtd(
         )
         if interactive:
             input("Press Enter to continue...")
+
+        print("Running simulation...")
         mode.run()
 
         print("Simulation complete, returning results.")
@@ -239,6 +243,34 @@ def soi_characterize_bend_varfdtd(
         return -T["T"][0]
 
 
+# Example characterization code
+
+def test_angle(results, angles, i):
+    print("Testing angle %d" % i)
+    results[i] = soi_characterize_bend_varfdtd(structure.SOI(), 800e-9, 50e-6, angles[i], 1.762e-6, interactive=False)
+
 if __name__ == "__main__":
-    for angle in range(0, 100, 10):
-        print(characterize_bend_varfdtd(500e-9, 1.5e-6, angle, interactive=False))
+    for angle in range(40, 70, 10):
+        print(soi_characterize_bend_varfdtd(structure.SOI(), 800e-9, 50e-6, angle, 1.762e-6, interactive=True))
+    # print("Initializing 4 workers")
+    # original_sigint_handler = signal.signal(signal.SIGINT, signal.SIG_IGN)
+    # pool = multiprocessing.Pool(4)
+    # signal.signal(signal.SIGINT, original_sigint_handler)
+
+    # num_angles = 10
+    # results = [0] * num_angles
+    # angles = np.linspace(0, 90, num_angles)
+    # jobs = []
+    # try:
+    #     for i in range(num_angles):
+    #         jobs.append((results, angles, i))
+    #     res = pool.starmap(test_angle, jobs)
+    #     res.get(60)
+    # except KeyboardInterrupt:
+    #     pool.terminate()
+    # else:
+    #     print("Job complete")
+    #     pool.close()
+    # pool.join()
+
+    # print(results)
