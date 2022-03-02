@@ -1,1 +1,1 @@
-# optics_lib
+# photonics-lib
