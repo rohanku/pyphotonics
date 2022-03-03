@@ -1,6 +1,4 @@
-import lumerical
-import modes
-import structure
+from pyphotonics.simulation import lumerical, modes, structure
 import numpy as np
 import os, string, random
 import matplotlib.pyplot as plt
@@ -20,6 +18,7 @@ def soi_characterize_bend_varfdtd(
     io_buffer=3,
     mesh_buffer=None,
 ):
+    tag = "".join(random.choice(string.ascii_letters) for i in range(10))
     """
     Returns the transmission of an SOI slab waveguide bend of a given width, radius, and angle at a given wavelength.
 
@@ -82,8 +81,10 @@ def soi_characterize_bend_varfdtd(
     source_x = radius * np.cos(angle_rad) - io_buffer * wavelength * np.sin(angle_rad)
     source_y = radius * np.sin(angle_rad) + io_buffer * wavelength * np.cos(angle_rad)
 
+    T = None
+
     print("Starting Lumerical session...")
-    with lumapi.MODE(hide=not interactive) as mode:
+    with lumapi.MODE() as mode:
         print("Setting up simulation...")
 
 
@@ -96,7 +97,7 @@ def soi_characterize_bend_varfdtd(
             z=soi.si_t / 2,
             z_span=10 * soi.si_t,
             x0=radius - sim_x,
-            y0=-radius / 2 - sim_y,
+            y0=-io_buffer * wavelength - sim_y,
             simulation_wavelength_min=wavelength,
             simulation_wavelength_max=wavelength,
             simulation_time=sim_time,
@@ -195,7 +196,6 @@ def soi_characterize_bend_varfdtd(
 
         # Calculate fundamental TE mode of input waveguide and update mode source
         mode_num = modes.get_fundamental_te_mode(mode)
-        print(mode_num)
         if mode_num == -1:
             raise TypeError("Failed to find fundamental TE mode for given parameters")
         mode.updatesourcemode(mode_num)
@@ -226,7 +226,7 @@ def soi_characterize_bend_varfdtd(
 
         print("Saving simulation file...")
         # Create temporary simulation folder and wait for user input before running if interactive
-        os.makedirs("/tmp/optics_lib/bend_char", exist_ok=True)
+        os.makedirs("/tmp/pyphotonics/bend_char", exist_ok=True)
         tag = "".join(random.choice(string.ascii_letters) for i in range(10))
         mode.save(
             f"/tmp/optics_lib/bend_char/width_{int(width*1e9)}nm_radius_{int(radius*1e9)}nm_angle_{int(angle)}_{tag}.lms"
@@ -240,37 +240,10 @@ def soi_characterize_bend_varfdtd(
         print("Simulation complete, returning results.")
         # Return the simulated T value
         T = mode.getresult("output_monitor", "T")
-        return -T["T"][0]
+        T = -T["T"][0]
 
-
-# Example characterization code
-
-def test_angle(results, angles, i):
-    print("Testing angle %d" % i)
-    results[i] = soi_characterize_bend_varfdtd(structure.SOI(), 800e-9, 50e-6, angles[i], 1.762e-6, interactive=False)
+    return T
 
 if __name__ == "__main__":
     for angle in range(40, 70, 10):
-        print(soi_characterize_bend_varfdtd(structure.SOI(), 800e-9, 50e-6, angle, 1.762e-6, interactive=True))
-    # print("Initializing 4 workers")
-    # original_sigint_handler = signal.signal(signal.SIGINT, signal.SIG_IGN)
-    # pool = multiprocessing.Pool(4)
-    # signal.signal(signal.SIGINT, original_sigint_handler)
-
-    # num_angles = 10
-    # results = [0] * num_angles
-    # angles = np.linspace(0, 90, num_angles)
-    # jobs = []
-    # try:
-    #     for i in range(num_angles):
-    #         jobs.append((results, angles, i))
-    #     res = pool.starmap(test_angle, jobs)
-    #     res.get(60)
-    # except KeyboardInterrupt:
-    #     pool.terminate()
-    # else:
-    #     print("Job complete")
-    #     pool.close()
-    # pool.join()
-
-    # print(results)
+        print(soi_characterize_bend_varfdtd(structure.SOI(), 800e-9, 50e-6, angle, 1.762e-6))
