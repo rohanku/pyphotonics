@@ -52,11 +52,11 @@ def soi_characterize_bend_varfdtd(
     """
     # Validate radius
     if radius < width / 2:
-        raise TypeError("Radius must be at least half of the width of the waveguide")
+        raise ValueError("Radius must be at least half of the width of the waveguide")
 
     # Validate angle
     if not 0 <= angle <= 180:
-        raise TypeError("Angle must be between 0 and 180.")
+        raise ValueError("Angle must be between 0 and 180.")
 
     print("Starting Lumerical session...")
     with lumapi.MODE(hide=not interactive) as mode:
@@ -195,7 +195,7 @@ def soi_characterize_bend_varfdtd(
         mode_num = modes.get_fundamental_te_mode(mode)
         print(mode_num)
         if mode_num == -1:
-            raise TypeError("Failed to find fundamental TE mode for given parameters")
+            raise ValueError("Failed to find fundamental TE mode for given parameters")
         mode.updatesourcemode(mode_num)
 
         # Add longitudinal monitor for qualitative characterization purposes
