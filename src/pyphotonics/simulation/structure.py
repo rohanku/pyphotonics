@@ -1,7 +1,10 @@
 class SOI:
     def __init__(self, substrate_s = 1.5e-3, substrate_t = 725e-6, box_t = 2e-6, si_t = 220e-9, tox_t = 1e-6):
         """
-        Set up SOI material stack in provided simulation and returns the corresponding layers. Takes the simulation object as a parameter.
+        Initialize an SOI material stack with the given parameters.
+
+        Parameters:
+            substrate-s (double)
         """
         # SOI parameters
         self.substrate_s = substrate_s
@@ -16,13 +19,21 @@ class SOI:
         Set up SOI material stack in provided simulation and returns the created layers.
 
         Parameters:
-            sim - Lumerical API simulation object
+            sim:
+                Lumerical API simulation object
 
         Returns:
-            substrate - Lumerical rect object representing silicon substrate
-            box - Lumerical rect object representing bottom oxide
-            si_etch - Lumerical rect object representing oxide filling in areas of etched silicon
-            tox - Lumerical rect object represent top oxide
+            substrate:
+                Lumerical rect object representing silicon substrate
+
+            box:
+                Lumerical rect object representing bottom oxide
+
+            si_etch:
+                Lumerical rect object representing oxide filling in areas of etched silicon
+
+            tox:
+                Lumerical rect object representing top oxide
         """
 
         # Create substrate
