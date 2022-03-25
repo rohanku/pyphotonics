@@ -1,5 +1,12 @@
 class SOI:
-    def __init__(self, substrate_s = 1.5e-3, substrate_t = 725e-6, box_t = 2e-6, si_t = 220e-9, tox_t = 1e-6):
+    def __init__(
+        self,
+        substrate_s=1.5e-3,
+        substrate_t=725e-6,
+        box_t=2e-6,
+        si_t=220e-9,
+        tox_t=1e-6,
+    ):
         """
         Initialize an SOI material stack with the given parameters.
 
@@ -12,7 +19,6 @@ class SOI:
         self.box_t = box_t
         self.si_t = si_t
         self.tox_t = tox_t
-
 
     def setup(self, sim):
         """

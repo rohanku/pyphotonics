@@ -7,6 +7,7 @@ import signal, multiprocessing
 
 lumapi = lumerical.lumapi
 
+
 def soi_characterize_bend_varfdtd(
     soi,
     width,
@@ -65,13 +66,21 @@ def soi_characterize_bend_varfdtd(
     # Compute necessary dimensions
     angle_rad = np.radians(angle)
 
-    sim_x_min = radius * (1 - np.cos(angle_rad)) - io_buffer * wavelength * (np.sin(angle_rad) + 1) - width * np.cos(angle_rad)
+    sim_x_min = (
+        radius * (1 - np.cos(angle_rad))
+        - io_buffer * wavelength * (np.sin(angle_rad) + 1)
+        - width * np.cos(angle_rad)
+    )
     sim_y_min = -2 * io_buffer * wavelength
     sim_x_max = io_buffer * wavelength + radius
-    sim_y_max = radius * np.sin(angle_rad) + io_buffer * wavelength * (np.cos(angle_rad) + 1) + width * np.sin(angle_rad)
-    sim_x = (sim_x_min + sim_x_max)/2
-    sim_y = (sim_y_min + sim_y_max)/2
-    sim_diag = ((sim_x_max - sim_x_min)**2 + (sim_y_max - sim_y_min)**2)**(1/2)
+    sim_y_max = (
+        radius * np.sin(angle_rad)
+        + io_buffer * wavelength * (np.cos(angle_rad) + 1)
+        + width * np.sin(angle_rad)
+    )
+    sim_x = (sim_x_min + sim_x_max) / 2
+    sim_y = (sim_y_min + sim_y_max) / 2
+    sim_diag = ((sim_x_max - sim_x_min) ** 2 + (sim_y_max - sim_y_min) ** 2) ** (1 / 2)
 
     input_wg_len = sim_diag
     input_wg_x = radius * np.cos(angle_rad) - input_wg_len * np.sin(angle_rad) / 2
@@ -86,7 +95,6 @@ def soi_characterize_bend_varfdtd(
     print("Starting Lumerical session...")
     with lumapi.MODE() as mode:
         print("Setting up simulation...")
-
 
         # Set up simulation
         varfdtd = mode.addvarfdtd(
@@ -244,6 +252,11 @@ def soi_characterize_bend_varfdtd(
 
     return T
 
+
 if __name__ == "__main__":
     for angle in range(40, 70, 10):
-        print(soi_characterize_bend_varfdtd(structure.SOI(), 800e-9, 50e-6, angle, 1.762e-6))
+        print(
+            soi_characterize_bend_varfdtd(
+                structure.SOI(), 800e-9, 50e-6, angle, 1.762e-6
+            )
+        )

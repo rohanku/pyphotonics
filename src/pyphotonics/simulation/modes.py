@@ -12,17 +12,22 @@ def get_fundamental_te_mode(sim):
     """
 
     # Store original mode source name
-    mode_source = sim.get('name')
+    mode_source = sim.get("name")
 
     # Copy selected mode source
     sim.copy()
-    tmp_source = 'tmp_source'
-    sim.set('name', tmp_source)
+    tmp_source = "tmp_source"
+    sim.set("name", tmp_source)
 
-    # Check 
+    # Check
     for i in range(1, 11):
         sim.updatesourcemode(i)
-        if sim.getresult(tmp_source, 'TE polarization fraction')['TE polarization fraction'][0] > 0.5:
+        if (
+            sim.getresult(tmp_source, "TE polarization fraction")[
+                "TE polarization fraction"
+            ][0]
+            > 0.5
+        ):
             sim.delete()
             sim.select(mode_source)
             return i
