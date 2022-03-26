@@ -7,6 +7,10 @@ def get_port_coords(port):
     return np.array([port[0], port[1]])
 
 
+def port_close(port1, port2):
+    return all(map(lambda x: np.isclose(x[0], x[1]), zip(port1, port2)))
+
+
 def euclidean_distance(p1, p2):
     """Returns the euclidean distance between two points"""
     return np.linalg.norm(p2 - p1)
@@ -69,8 +73,8 @@ def perp(v):
     return b
 
 
-def ray_intersect(p1, angle1, p2, angle2):
-    """Returns the intersection point of two rays, or None if no such point exists"""
+def line_intersect(p1, angle1, p2, angle2):
+    """Returns the intersection point of two lines, or None if no such point exists"""
     angle1, angle2 = normalize_angle(angle1), normalize_angle(angle2)
     if np.isclose(angle1, angle2):
         return None
@@ -78,7 +82,12 @@ def ray_intersect(p1, angle1, p2, angle2):
     v2 = np.array([np.cos(angle2), np.sin(angle2)])
     dp = p1 - p2
     v1_perp = perp(v1)
-    point = (v1_perp @ dp) / (v1_perp @ v2) * v2 + p2
+    return (v1_perp @ dp) / (v1_perp @ v2) * v2 + p2
+
+
+def ray_intersect(p1, angle1, p2, angle2):
+    """Returns the intersection point of two rays, or None if no such point exists"""
+    point = line_intersect(p1, angle1, p2, angle2)
     if not angle_close(horizontal_angle(point - p2), angle2):
         return None
     return point

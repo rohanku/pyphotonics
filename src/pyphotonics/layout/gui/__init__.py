@@ -4,7 +4,7 @@ from pyphotonics.layout import utils
 import random
 import string
 from tkinter import *
-from tkinter import ttk, messagebox
+from tkinter import ttk, messagebox, filedialog
 from PIL import Image, ImageTk
 
 
@@ -54,6 +54,8 @@ class PathingGUI(ttk.Frame):
         self.selected_color = "#1eff00"  # Color of selected ports
         self.deselected_color = "#00c8ff"  # Color of deselected ports
         self.N = len(inputs)  # Number of paths
+        self.inputs = inputs
+        self.outputs = outputs
         self.autoroute_paths = (
             None  # Determines whether program was quit or autoroute was run
         )
@@ -62,22 +64,57 @@ class PathingGUI(ttk.Frame):
         menu_bar = Menu(self.master)
 
         # Basic file operations (e.g. save, open, close)
+        self.current_file = None
         file_menu = Menu(menu_bar, tearoff=0)
+        file_menu.add_command(label="Open", command=self.open, accelerator="Cmd+O")
         file_menu.add_command(
             label="Close", command=self.master.quit, accelerator="Cmd+W"
         )
         file_menu.add_command(label="Save", command=self.save, accelerator="Cmd+S")
+        file_menu.add_command(
+            label="Save As", command=self.save_as, accelerator="Cmd+Shift+S"
+        )
+        self.master.bind_all("<Command-o>", self.open)
+        self.master.bind_all("<Command-O>", self.open)
         self.master.bind_all("<Command-w>", lambda x: self.master.quit())
+        self.master.bind_all("<Command-W>", lambda x: self.master.quit())
+        self.master.bind_all("<Command-s>", self.save)
         self.master.bind_all("<Command-S>", self.save)
+        self.master.bind_all("<Command-Shift-s>", self.save_as)
+        self.master.bind_all("<Command-Shift-S>", self.save_as)
         menu_bar.add_cascade(label="File", menu=file_menu)
 
         # Basic edit operations (e.g. select path, undo, redo)
         # TODO: Add bindings and commands for menu items
         edit_menu = Menu(menu_bar, tearoff=0)
-        edit_menu.add_command(label="Next Path", accelerator="D")
-        edit_menu.add_command(label="Previous Path", accelerator="A")
-        edit_menu.add_command(label="Undo", accelerator="Cmd-Z")
-        edit_menu.add_command(label="Redo", accelerator="Cmd-Shift-Z")
+        edit_menu.add_command(
+            label="Next Path", command=self.next_path, accelerator="E"
+        )
+        edit_menu.add_command(
+            label="Previous Path", command=self.prev_path, accelerator="Q"
+        )
+        edit_menu.add_command(label="Redraw", command=self.clear, accelerator="Cmd+D")
+        edit_menu.add_command(
+            label="Clear All", command=self.clear_all, accelerator="Cmd+L"
+        )
+        edit_menu.add_command(
+            label="Autoroute", command=self.autoroute, accelerator="Cmd+R"
+        )
+        edit_menu.add_command(label="Undo", command=self.undo, accelerator="Cmd+Z")
+        edit_menu.add_command(
+            label="Redo", command=self.redo, accelerator="Cmd+Shift+Z"
+        )
+        self.master.bind_all("<KeyPress>", self.key_press)
+        self.master.bind_all("<Command-d>", self.clear)
+        self.master.bind_all("<Command-D>", self.clear)
+        self.master.bind_all("<Command-l>", self.clear_all)
+        self.master.bind_all("<Command-L>", self.clear_all)
+        self.master.bind_all("<Command-r>", self.autoroute)
+        self.master.bind_all("<Command-R>", self.autoroute)
+        self.master.bind_all("<Command-z>", self.undo)
+        self.master.bind_all("<Command-Z>", self.undo)
+        self.master.bind_all("<Command-Shift-z>", self.redo)
+        self.master.bind_all("<Command-Shift-Z>", self.redo)
         menu_bar.add_cascade(label="Edit", menu=edit_menu)
 
         self.master.config(menu=menu_bar)
@@ -138,6 +175,11 @@ class PathingGUI(ttk.Frame):
         self.current_paths = [
             [utils.get_port_coords(self.png_inputs[i])] for i in range(self.N)
         ]  # List of current coordinates for each path, defaults to just those of the input port
+        self.undo_paths = []
+        self.undo_terminated = []
+        self.redo_paths = []
+        self.redo_terminated = []
+        self.max_undos = 10
         self.path_lines = [
             None
         ] * self.N  # Tkinter Canvas object IDs of lines representing current paths
@@ -152,7 +194,7 @@ class PathingGUI(ttk.Frame):
 
         # Path selection widgets
         self.paths = [
-            f"Path {i}" for i in range(self.N)
+            f"Path {i+1}" for i in range(self.N)
         ]  # String options for Tkinter OptionMenu
         self.selected_path = StringVar(
             self.master, self.paths[self.selected_path_index]
@@ -162,13 +204,14 @@ class PathingGUI(ttk.Frame):
         )  # OptionMenu for selecting paths
         redraw_button = Button(toolbar, text="Redraw", command=self.clear)
         clear_all_button = Button(toolbar, text="Clear All", command=self.clear_all)
-        clear_all_button = Button(toolbar, text="Autoroute", command=self.autoroute)
+        autoroute_button = Button(toolbar, text="Autoroute", command=self.autoroute)
 
         # Toolbar UI layout
         toolbar.grid(row=0, column=0, sticky="nwe")
         path_select.grid(row=0, column=0)
         redraw_button.grid(row=0, column=1)
         clear_all_button.grid(row=0, column=2)
+        autoroute_button.grid(row=0, column=3)
 
         # Bind mouse movement and clicking for route placement
         self.canvas.bind("<Motion>", self.motion)
@@ -217,6 +260,13 @@ class PathingGUI(ttk.Frame):
     def show_image(self, event=None):
         """Show image and other relevant geometry on the Canvas"""
         # Draw all paths, including the one being currently edited
+        if not self.path_terminated[self.selected_path_index]:
+            self.canvas.itemconfigure(self.cursor_line, state="normal")
+        else:
+            self.canvas.itemconfigure(self.cursor_line, state="hidden")
+        cur_coords = self.canvas.coords(self.cursor_line)
+        coords = self.get_zoom_coords(self.current_paths[self.selected_path_index][-1])
+        self.canvas.coords(self.cursor_line, *coords, cur_coords[2], cur_coords[3])
         for i in range(self.N):
             if len(self.current_paths[i]) > 1:
                 if self.path_lines[i]:
@@ -292,10 +342,6 @@ class PathingGUI(ttk.Frame):
 
     def path_selected(self, *args):
         """Handler for changing the selected path"""
-        # Clear paths that have not been completed
-        if not self.path_terminated[self.selected_path_index]:
-            self.clear_by_index(self.selected_path_index)
-
         # Set the appropriate marker colors and update the current index
         for i in range(self.N):
             if self.paths[i] == self.selected_path.get():
@@ -305,26 +351,22 @@ class PathingGUI(ttk.Frame):
             else:
                 self.canvas.itemconfig(self.input_rects[i], fill=self.deselected_color)
                 self.canvas.itemconfig(self.output_rects[i], fill=self.deselected_color)
+        self.show_image()
 
     def motion(self, event):
         """Handler for mouse movement"""
         # If the path is not terminated, show the drawing cursor line
-        if not self.path_terminated[self.selected_path_index]:
-            event_coords = np.array([event.x, event.y])
-            coords = self.get_zoom_coords(
-                self.current_paths[self.selected_path_index][-1]
-            )
-            self.canvas.itemconfigure(self.cursor_line, state="normal")
-            self.canvas.coords(
-                self.cursor_line, *coords, *self.get_canvas_coords(event_coords)
-            )
-        else:
-            self.canvas.itemconfigure(self.cursor_line, state="hidden")
+        event_coords = np.array([event.x, event.y])
+        coords = self.get_zoom_coords(self.current_paths[self.selected_path_index][-1])
+        self.canvas.coords(
+            self.cursor_line, *coords, *self.get_canvas_coords(event_coords)
+        )
 
     def click(self, event):
         """Handler for mouse click"""
         # If the path is not terminated, add to the current path
         if not self.path_terminated[self.selected_path_index]:
+            self.push_state()
             event_coords = np.array([event.x, event.y])
             coords1 = self.get_canvas_coords(event_coords)
             coords2 = self.get_zoom_coords(
@@ -341,7 +383,17 @@ class PathingGUI(ttk.Frame):
                 self.current_paths[self.selected_path_index].append(
                     self.get_real_coords(event_coords)
                 )
+
         self.show_image()
+
+    def push_state(self):
+        if len(self.undo_paths) == self.max_undos:
+            self.undo_paths.pop(0)
+            self.undo_terminated.pop(0)
+        self.undo_paths.append(list(map(lambda x: x[:], self.current_paths)))
+        self.undo_terminated.append(self.path_terminated[:])
+        self.redo_paths = []
+        self.redo_terminated = []
 
     def clear_by_index(self, index):
         """Clear the current path for the given index"""
@@ -352,19 +404,141 @@ class PathingGUI(ttk.Frame):
         self.path_lines[index] = None
         self.path_terminated[index] = False
 
-    def clear(self):
+    def clear(self, *args):
         """Clear the currently selected path"""
+        self.push_state()
         self.clear_by_index(self.selected_path_index)
+        self.show_image()
 
-    def clear_all(self):
+    def clear_all(self, *args):
         """Clear all paths"""
+        self.push_state()
         for i in range(self.N):
             self.clear_by_index(i)
+        self.show_image()
 
-    def save(self):
-        pass
+    def open(self, *args):
+        f = filedialog.askopenfile()
+        if f is None:
+            return
+        try:
+            lines = f.read().strip().split("\n")
+            if len(lines) < 1:
+                raise TypeError("No data found")
+            N = int(lines.pop(0))
+            if N != self.N:
+                messagebox.showerror("error", "Number of ports does not match!")
+                f.close()
+                return
+            if len(lines) != 3 * N:
+                raise TypeError("Incorrect number of lines")
+            inputs = []
+            for i in range(N):
+                data = lines.pop(0).strip().split()
+                if len(data) != 3:
+                    raise TypeError("Invalid port specification")
+                inputs.append(tuple(map(float, data)))
+            outputs = []
+            for i in range(N):
+                data = lines.pop(0).strip().split()
+                if len(data) != 3:
+                    raise TypeError("Invalid port specification")
+                outputs.append(tuple(map(float, data)))
+            for i in range(N):
+                if not utils.port_close(
+                    inputs[i], self.inputs[i]
+                ) or not utils.port_close(outputs[i], self.outputs[i]):
+                    messagebox.showerror("Ports do not correspond!")
+                    f.close()
+                    return
+            paths = []
+            path_terminated = []
+            for i in range(N):
+                data = lines.pop(0).strip().split()
+                cur_terminated = data.pop(0) == "*"
+                data = list(map(float, data))
+                if len(data) % 2 != 0:
+                    raise TypeError("Invalid path specification")
+                path = []
+                for j in range(len(data) // 2):
+                    path.append(np.array([data[2 * j], data[2 * j + 1]]))
+                path[0] = utils.get_port_coords(self.png_inputs[i])
+                if cur_terminated:
+                    path[-1] = utils.get_port_coords(self.png_outputs[i])
+                paths.append(path)
+                path_terminated.append(cur_terminated)
+            self.current_paths = paths
+            self.path_terminated = path_terminated
+            self.show_image()
+        except Exception as e:
+            print(e)
+            messagebox.showerror("error", "File is malformed!")
+        f.close()
 
-    def autoroute(self):
+    def save_paths(self):
+        with open(self.current_file, "w") as f:
+            f.write(f"{self.N}\n")
+            for i in range(self.N):
+                f.write(f"{' '.join(map(str, self.inputs[i]))}\n")
+            for i in range(self.N):
+                f.write(f"{' '.join(map(str, self.outputs[i]))}\n")
+            for i in range(self.N):
+                f.write(
+                    f"{'*' if self.path_terminated[i] else '-'} {' '.join(map(lambda x: f'{x[0]} {x[1]}', self.current_paths[i]))}\n"
+                )
+
+    def save(self, *args):
+        if self.current_file is None:
+            self.save_as()
+        else:
+            self.save_paths()
+
+    def save_as(self, *args):
+        self.current_file = filedialog.asksaveasfilename(
+            defaultextension=".route",
+            filetypes=(("Autoroute File", "*.route"), ("All Files", "*.*")),
+        )
+        if self.current_file is None:
+            return
+        self.save_paths()
+
+    def key_press(self, event):
+        if event.char.lower() == "e":
+            self.next_path()
+        if event.char.lower() == "q":
+            self.prev_path()
+
+    def next_path(self, *args):
+        self.selected_path.set(self.paths[(self.selected_path_index + 1) % self.N])
+        self.path_selected()
+
+    def prev_path(self, *args):
+        self.selected_path.set(self.paths[(self.selected_path_index - 1) % self.N])
+        self.path_selected()
+
+    def undo(self, *args):
+        if len(self.undo_paths) == 0:
+            messagebox.showerror("error", "Nothing to undo!")
+            return
+        self.redo_paths.append(list(map(lambda x: x[:], self.current_paths)))
+        self.redo_terminated.append(self.path_terminated[:])
+        self.clear_all()
+        self.current_paths = self.undo_paths.pop()
+        self.path_terminated = self.undo_terminated.pop()
+        self.show_image()
+
+    def redo(self, *args):
+        if len(self.redo_paths) == 0:
+            messagebox.showerror("error", "Nothing to redo!")
+            return
+        self.undo_paths.append(list(map(lambda x: x[:], self.current_paths)))
+        self.undo_terminated.append(self.path_terminated[:])
+        self.clear_all()
+        self.current_paths = self.redo_paths.pop()
+        self.path_terminated = self.redo_terminated.pop()
+        self.show_image()
+
+    def autoroute(self, *args):
         if not all(self.path_terminated):
             messagebox.showerror("error", "Not all paths have been specified!")
             return

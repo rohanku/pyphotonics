@@ -250,7 +250,7 @@ def soi_characterize_bend_varfdtd(
         T = mode.getresult("output_monitor", "T")
         T = -T["T"][0]
 
-    return T
+    return -10 * np.log10(T)
 
 
 if __name__ == "__main__":

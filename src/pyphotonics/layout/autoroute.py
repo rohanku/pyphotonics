@@ -10,15 +10,83 @@ tk = Tk()
 
 
 class WaveguidePath:
-    def __init__(self, points, width, r_min):
+    def __init__(self, points, width, r_vals):
         self.points = points
         self.width = width
-        self.r_min = r_min
+        self.r_vals = r_vals
+        self.r_min = min(r_vals)
+        self.N = len(points)
+        self.ensure_r_min()
+
+    def minimum_length(self, index):
+        """Returns the minimum length of the path segment given by index in [0, len(path)-1)"""
+        path = self.points
+        if index < 0 or index > self.N - 2:
+            raise TypeError("Segment index must be between in [0, len(path)-1)")
+        theta1 = (
+            0
+            if index == 0
+            else utils.path_angle(path[index - 1], path[index], path[index + 1])
+        )
+        theta2 = (
+            0
+            if index == self.N - 2
+            else utils.path_angle(path[index], path[index + 1], path[index + 2])
+        )
+
+        return (
+            self.r_min * (np.abs(np.tan(theta1 / 2)) + np.abs(np.tan(theta2 / 2)))
+            + 1e-5
+        )
+
+    def segment_drag(self, index, d):
+        """Drag segment by a perpendicular distance d while maintaining its angle. Cannot drag the first or last segments"""
+        path = self.points
+        if index < 1 or index > self.N - 3:
+            raise TypeError("Segment index must be between in [0, len(path)-1)")
+        v_path = path[index + 1] - path[index]
+        v_displacement = utils.perp(v_path)
+        v_displacement /= np.linalg.norm(v_displacement)
+        p_new = path[index] + v_displacement * d
+        angle = utils.horizontal_angle(v_path)
+        path[index] = utils.line_intersect(
+            p_new,
+            angle,
+            path[index],
+            utils.horizontal_angle(path[index] - path[index - 1]),
+        )
+        path[index + 1] = utils.line_intersect(
+            p_new,
+            angle,
+            path[index + 1],
+            utils.horizontal_angle(path[index + 2] - path[index + 1]),
+        )
+
+    def ensure_r_min(self):
+        """Shift path segments by minimum amount to ensure that there is space for each bend"""
+        for i in range(1, self.N - 2):
+            curr_len = utils.euclidean_distance(self.points[i], self.points[i - 1])
+            min_len = self.minimum_length(i - 1)
+            theta = utils.path_angle(
+                self.points[i - 1], self.points[i], self.points[i + 1]
+            )
+            if curr_len < min_len:
+                self.segment_drag(i, (curr_len - min_len) / np.sin(theta))
+        for i in range(self.N - 3, 0, -1):
+            curr_len = utils.euclidean_distance(self.points[i + 1], self.points[i + 2])
+            min_len = self.minimum_length(i + 1)
+            theta = utils.path_angle(
+                self.points[i + 2], self.points[i + 1], self.points[i]
+            )
+            if curr_len < min_len:
+                self.segment_drag(i, (min_len - curr_len) / np.sin(theta))
 
 
-def turn_port_route(port, r_min, target_angle, reverse=False):
+def turn_port_route(
+    port, r_min, target_angle, reverse=False, four_point_threshold=10.0
+):
     """
-    Returns a 4-point bend that turns the given port to the desired angle
+    Returns a 3- or 4-point bend that turns the given port to the desired angle
 
     Parameters:
         port (3-tuple):
@@ -29,6 +97,8 @@ def turn_port_route(port, r_min, target_angle, reverse=False):
             Angle in degrees counter-clockwise from the horizontal that the port should be turned to
         reverse (bool):
             Treat port as an output, returning the turn leading into the port from the target_angle
+        four_point_threshold (double):
+            Bends with angles from [-180 + fpt, 180 - fpt] will have 3 points, outside of that range bends will have 4
 
     Returns:
         bend (list of 4 tuples):
@@ -46,23 +116,39 @@ def turn_port_route(port, r_min, target_angle, reverse=False):
     if np.isclose(bend_angle, 0):
         return [start]
 
-    l1 = np.abs(r_min * np.tan(bend_angle_rad / 4)) + 0.001
-    inter1 = np.array([l1 * np.cos(port_angle_rad), l1 * np.sin(port_angle_rad)])
+    if (
+        bend_angle < -180 + four_point_threshold
+        or bend_angle > 180 - four_point_threshold
+    ):
+        l1 = np.abs(r_min * np.tan(bend_angle_rad / 4)) + 1e-5
+        inter1 = np.array([l1 * np.cos(port_angle_rad), l1 * np.sin(port_angle_rad)])
 
-    l2 = 2 * l1
-    theta2 = port_angle_rad + bend_angle_rad / 2
-    inter2 = inter1 + np.array([l2 * np.cos(theta2), l2 * np.sin(theta2)])
+        l2 = 2 * l1
+        theta2 = port_angle_rad + bend_angle_rad / 2
+        inter2 = inter1 + np.array([l2 * np.cos(theta2), l2 * np.sin(theta2)])
 
-    theta3 = theta2 + bend_angle_rad / 2
-    inter3 = inter2 + np.array([l1 * np.cos(theta3), l1 * np.sin(theta3)])
+        theta3 = theta2 + bend_angle_rad / 2
+        inter3 = inter2 + np.array([l1 * np.cos(theta3), l1 * np.sin(theta3)])
+
+        if reverse:
+            return [-inter3 + start, -inter2 + start, -inter1 + start, start]
+
+        return [start, start + inter1, start + inter2, start + inter3]
+
+    l = np.abs(r_min * np.tan(bend_angle_rad / 2)) + 1e-5
+    inter1 = np.array([l * np.cos(port_angle_rad), l * np.sin(port_angle_rad)])
+    target_angle_rad = np.radians(target_angle)
+    inter2 = inter1 + np.array(
+        [l * np.cos(target_angle_rad), l * np.sin(target_angle_rad)]
+    )
 
     if reverse:
-        return [-inter3 + start, -inter2 + start, -inter1 + start, start]
+        return [-inter2 + start, -inter1 + start, start]
 
-    return [start, start + inter1, start + inter2, start + inter3]
+    return [start, start + inter1, start + inter2]
 
 
-def direct_route(port1, port2, r_min):
+def direct_route(port1, port2, r_vals):
     """
     Returns the a basic two segment route between two ports, adding segments as necessary to account for port angle.
 
@@ -76,8 +162,8 @@ def direct_route(port1, port2, r_min):
         width (double):
             Width of waveguides in GDS units
 
-        r_min (double):
-            Minimum bend radius in GDS units
+        r_vals (list of doubles):
+            Possible bend radii in GDS units
 
         d_min (doubles):
             Minimum distance between waveguides in GDS units
@@ -104,9 +190,9 @@ def direct_route(port1, port2, r_min):
     ]
 
     # Turn ports to the desired angle
-    points1 = turn_port_route(port1, r_min, best_dir[0])
+    points1 = turn_port_route(port1, min(r_vals), best_dir[0])
     points2 = turn_port_route(
-        port2, r_min, best_dir[1], reverse=True
+        port2, min(r_vals), best_dir[1], reverse=True
     )  # Reverse for output
 
     # Add intermediate point for manhattan routing
@@ -117,7 +203,7 @@ def direct_route(port1, port2, r_min):
 
 
 def user_route(
-    inputs, outputs, width, r_min, d_min, initial_paths=None, current_gds=None
+    inputs, outputs, width, r_vals, d_min, initial_paths=None, current_gds=None
 ):
     if not initial_paths:
         initial_paths = get_rough_paths(inputs, outputs, current_gds)
@@ -128,16 +214,16 @@ def user_route(
     for i in range(len(inputs)):
         path = initial_paths[i]
         if len(path) <= 2:
-            final_paths.append(WaveguidePath(path, width, r_min))
+            final_paths.append(WaveguidePath(path, width, r_vals))
         curr_dir = utils.manhattan_angle(utils.horizontal_angle(path[1] - path[0]))
-        manhattan_path = turn_port_route(inputs[i], r_min, np.degrees(curr_dir))
+        manhattan_path = turn_port_route(inputs[i], min(r_vals), np.degrees(curr_dir))
         for j in range(1, len(path) - 1):
             if j == len(path) - 2:
                 final_dir = utils.manhattan_angle(
                     utils.horizontal_angle(path[j + 1] - path[j])
                 )
                 output_turn = turn_port_route(
-                    outputs[i], r_min, np.degrees(final_dir), reverse=True
+                    outputs[i], min(r_vals), np.degrees(final_dir), reverse=True
                 )
                 intermediate = utils.ray_intersect(
                     manhattan_path[-1],
@@ -155,11 +241,11 @@ def user_route(
                 curr_dir = utils.manhattan_angle(
                     utils.horizontal_angle(path[j + 1] - path[j])
                 )
-        final_paths.append(WaveguidePath(manhattan_path, width, r_min))
+        final_paths.append(WaveguidePath(manhattan_path, width, r_vals))
     return final_paths
 
 
-def staircase_route(inputs, outputs, width, r_min, d_min, initial_paths=None):
+def staircase_route(inputs, outputs, width, r_vals, d_min, initial_paths=None):
     pass
 
 
@@ -176,9 +262,9 @@ def autoroute(
     inputs,
     outputs,
     width,
-    r_min,
+    r_vals,
     d_min,
-    method="direct",
+    method="user",
     current_gds=None,
     initial_paths=None,
 ):
@@ -195,8 +281,8 @@ def autoroute(
         width (double):
             Width of waveguides in GDS units
 
-        r_min (double):
-            Minimum bend radius in GDS units
+        r_vals (list of doubles):
+            Possible bend radii in GDS units
 
         d_min (double):
             Minimum distance between waveguides in GDS units
@@ -212,18 +298,18 @@ def autoroute(
     if len(inputs) != len(outputs):
         raise ValueError("Input and output port arrays must have the same length")
 
-    if r_min <= 0:
+    if len(r_vals) == 0 or min(r_vals) <= 0:
         raise ValueError("Minimum radius must be positive")
 
     if method == "direct":
         paths = []
         for i in range(len(inputs)):
             port1, port2 = inputs[i], outputs[i]
-            paths.append(WaveguidePath(direct_route(port1, port2), width, r_min))
+            paths.append(WaveguidePath(direct_route(port1, port2), width, r_vals))
         return paths
     elif method == "user":
         return user_route(
-            inputs, outputs, width, r_min, d_min, initial_paths, current_gds
+            inputs, outputs, width, r_vals, d_min, initial_paths, current_gds
         )
 
 
@@ -341,7 +427,7 @@ if __name__ == "__main__":
             (-300, 2508.777, 180),
         ],
         0.8,
-        50,
+        [50],
         10,
         method="user",
         # initial_paths=[
