@@ -8,6 +8,7 @@ def get_port_coords(port):
 
 
 def port_close(port1, port2):
+    """Checks if two ports are the same"""
     return all(map(lambda x: np.isclose(x[0], x[1]), zip(port1, port2)))
 
 
@@ -48,10 +49,12 @@ def horizontal_angle(v):
 
 
 def reverse_angle(angle):
+    """Flips an angle about the origin"""
     return normalize_angle(angle + np.pi)
 
 
 def angle_close(angle1, angle2):
+    """Checks if two angles are close to one another"""
     return np.isclose(0, normalize_angle(angle1 - angle2))
 
 
@@ -126,6 +129,7 @@ def get_bounding_box(points, padding=0):
 
 
 def get_port_polygons(ports, l, w):
+    """Returns polygon outlines for port markers used in the GUI"""
     polys = []
     for port in ports:
         poly = []

@@ -16,13 +16,22 @@ class WaveguidePath:
         self.r_vals = r_vals
         self.r_min = min(r_vals)
         self.N = len(points)
+        self.remove_extra_points()
+        self.bend_radii = [0] + [self.r_min] * (self.N - 2) + [0]
         self.ensure_r_min()
+        self.maximize_bend_radii()
+
+    def get_length(self, index):
+        """Returns the length of the path segment given by index in [0, len(path)-1)"""
+        if index < 0 or index > self.N - 2:
+            raise TypeError("Segment index must be between in [0, len(path)-1)")
+        return utils.euclidean_distance(self.points[index], self.points[index + 1])
 
     def minimum_length(self, index):
         """Returns the minimum length of the path segment given by index in [0, len(path)-1)"""
-        path = self.points
         if index < 0 or index > self.N - 2:
             raise TypeError("Segment index must be between in [0, len(path)-1)")
+        path = self.points
         theta1 = (
             0
             if index == 0
@@ -35,15 +44,33 @@ class WaveguidePath:
         )
 
         return (
-            self.r_min * (np.abs(np.tan(theta1 / 2)) + np.abs(np.tan(theta2 / 2)))
+            self.bend_radii[index] * np.abs(np.tan(theta1 / 2))
+            + self.bend_radii[index + 1] * np.abs(np.tan(theta2 / 2))
             + 1e-5
         )
 
+    def remove_extra_points(self):
+        """Deletes points that do not contribute to the waveguide geometry"""
+        i = 0
+        while i < self.N - 2:
+            if np.isclose(
+                0,
+                utils.path_angle(
+                    self.points[i], self.points[i + 1], self.points[i + 2]
+                ),
+            ):
+                self.points.pop(i + 1)
+                self.N -= 1
+                continue
+            i += 1
+
     def segment_drag(self, index, d):
         """Drag segment by a perpendicular distance d while maintaining its angle. Cannot drag the first or last segments"""
-        path = self.points
         if index < 1 or index > self.N - 3:
-            raise TypeError("Segment index must be between in [0, len(path)-1)")
+            raise TypeError(
+                "Only segments with index in [1, len(path)-2) can be dragged"
+            )
+        path = self.points
         v_path = path[index + 1] - path[index]
         v_displacement = utils.perp(v_path)
         v_displacement /= np.linalg.norm(v_displacement)
@@ -65,7 +92,7 @@ class WaveguidePath:
     def ensure_r_min(self):
         """Shift path segments by minimum amount to ensure that there is space for each bend"""
         for i in range(1, self.N - 2):
-            curr_len = utils.euclidean_distance(self.points[i], self.points[i - 1])
+            curr_len = self.get_length(i - 1)
             min_len = self.minimum_length(i - 1)
             theta = utils.path_angle(
                 self.points[i - 1], self.points[i], self.points[i + 1]
@@ -73,13 +100,22 @@ class WaveguidePath:
             if curr_len < min_len:
                 self.segment_drag(i, (curr_len - min_len) / np.sin(theta))
         for i in range(self.N - 3, 0, -1):
-            curr_len = utils.euclidean_distance(self.points[i + 1], self.points[i + 2])
+            curr_len = self.get_length(i + 1)
             min_len = self.minimum_length(i + 1)
             theta = utils.path_angle(
                 self.points[i + 2], self.points[i + 1], self.points[i]
             )
             if curr_len < min_len:
                 self.segment_drag(i, (min_len - curr_len) / np.sin(theta))
+
+    def maximize_bend_radii(self):
+        """Assign the largest possible bend radius to each bend, prioritizing uniformity"""
+        for i in range(1, len(self.r_vals)):
+            for j in range(1, self.N - 1):
+                curr_radius = self.bend_radii[j]
+                self.bend_radii[j] = self.r_vals[i]
+                if self.minimum_length(j) > self.get_length(j):
+                    self.bend_radii[j] = curr_radius
 
 
 def turn_port_route(
@@ -91,12 +127,16 @@ def turn_port_route(
     Parameters:
         port (3-tuple):
             Port represented by (x, y, angle), where angle is degrees counter-clockwise from the horizontal
+
         r_min (double):
             The minimum radius for executing the turn
+
         target_angle (double):
             Angle in degrees counter-clockwise from the horizontal that the port should be turned to
+
         reverse (bool):
             Treat port as an output, returning the turn leading into the port from the target_angle
+
         four_point_threshold (double):
             Bends with angles from [-180 + fpt, 180 - fpt] will have 3 points, outside of that range bends will have 4
 
@@ -148,9 +188,9 @@ def turn_port_route(
     return [start, start + inter1, start + inter2]
 
 
-def direct_route(port1, port2, r_vals):
+def direct_route(port1, port2, width, r_vals):
     """
-    Returns the a basic two segment route between two ports, adding segments as necessary to account for port angle.
+    Returns a basic two segment route between two ports, adding segments as necessary to account for port angle.
 
     Parameters:
         inputs (list of 3-tuples):
@@ -165,15 +205,9 @@ def direct_route(port1, port2, r_vals):
         r_vals (list of doubles):
             Possible bend radii in GDS units
 
-        d_min (doubles):
-            Minimum distance between waveguides in GDS units
-
-        output_file (str):
-            Path to output GDS file
-
     Returns:
-        paths (list of WaveguidePaths):
-            List of WaveguidePaths between their corresponding inputs and outputs
+        path (WaveguidePath):
+            WaveguidePath between input and output port
     """
     # Determine the best set of directions for the given ports to be bent to minimize total bend angle
     dirs = utils.get_perpendicular_directions(port1, port2)
@@ -199,59 +233,83 @@ def direct_route(port1, port2, r_vals):
     coords1 = points1[-1] if best_dir[0] == 90 or best_dir[0] == -90 else points2[0]
     coords2 = points2[0] if best_dir[0] == 90 or best_dir[0] == -90 else points1[-1]
 
-    return points1 + [np.array([coords1[0], coords2[1]])] + points2
+    return WaveguidePath(
+        points1 + [np.array([coords1[0], coords2[1]])] + points2, width, r_vals
+    )
 
 
 def user_route(
-    inputs, outputs, width, r_vals, d_min, initial_paths=None, current_gds=None
+    inputs, outputs, width, r_vals, d_min, route_file=None, current_gds=None
 ):
-    if not initial_paths:
-        initial_paths = get_rough_paths(inputs, outputs, current_gds)
-        if initial_paths is None:
-            raise TypeError("No initial paths specified")
+    """
+    Returns a user specified route that has been modified to fit the given specifications. Opens a routing GUI if necessary to allow for user input.
+
+    Parameters:
+        inputs (list of 3-tuples):
+            List of input ports represented by (x, y, angle), where angle is degrees counter-clockwise from the horizontal
+
+        outputs (list of 3-tuples):
+            List of output ports represented by (x, y, angle), where angle is degrees counter-clockwise from the horizontal
+
+        width (double):
+            Width of waveguides in GDS units
+
+        r_vals (list of doubles):
+            Possible bend radii in GDS units
+
+        d_min (double):
+            Minimum distance between waveguides in GDS units
+
+        route_file (str):
+            Path to a .route file with the desired initial paths
+
+        current_gds (str):
+            Path to the GDS for which the routes are being generated
+
+    Returns:
+        path (WaveguidePath):
+            WaveguidePath between input and output port
+    """
+    initial_paths = get_rough_paths(inputs, outputs, route_file, current_gds)
+    if initial_paths is None:
+        raise TypeError("No initial paths specified")
 
     final_paths = []
     for i in range(len(inputs)):
         path = initial_paths[i]
-        if len(path) <= 2:
-            final_paths.append(WaveguidePath(path, width, r_vals))
         curr_dir = utils.manhattan_angle(utils.horizontal_angle(path[1] - path[0]))
         manhattan_path = turn_port_route(inputs[i], min(r_vals), np.degrees(curr_dir))
-        for j in range(1, len(path) - 1):
-            if j == len(path) - 2:
-                final_dir = utils.manhattan_angle(
-                    utils.horizontal_angle(path[j + 1] - path[j])
-                )
-                output_turn = turn_port_route(
-                    outputs[i], min(r_vals), np.degrees(final_dir), reverse=True
-                )
-                intermediate = utils.ray_intersect(
-                    manhattan_path[-1],
-                    curr_dir,
-                    output_turn[0],
-                    utils.reverse_angle(final_dir),
-                )
-                if intermediate is None:
-                    raise TypeError("Provided path is not a valid Manhattan route")
-                manhattan_path.extend([intermediate, *output_turn])
-            else:
-                manhattan_path.append(
-                    utils.ray_project(manhattan_path[-1], curr_dir, path[j])
-                )
-                curr_dir = utils.manhattan_angle(
-                    utils.horizontal_angle(path[j + 1] - path[j])
-                )
+        for j in range(1, len(path) - 2):
+            manhattan_path.append(
+                utils.ray_project(manhattan_path[-1], curr_dir, path[j])
+            )
+            curr_dir = utils.manhattan_angle(
+                utils.horizontal_angle(path[j + 1] - path[j])
+            )
+        final_dir = utils.manhattan_angle(utils.horizontal_angle(path[-1] - path[-2]))
+        output_turn = turn_port_route(
+            outputs[i], min(r_vals), np.degrees(final_dir), reverse=True
+        )
+        intermediate = utils.ray_intersect(
+            manhattan_path[-1],
+            curr_dir,
+            output_turn[0],
+            utils.reverse_angle(final_dir),
+        )
+        if intermediate is None:
+            raise TypeError("Provided path is not a valid Manhattan route")
+        manhattan_path.extend([intermediate, *output_turn])
         final_paths.append(WaveguidePath(manhattan_path, width, r_vals))
     return final_paths
 
 
-def staircase_route(inputs, outputs, width, r_vals, d_min, initial_paths=None):
-    pass
-
-
-def get_rough_paths(inputs, outputs, current_gds=None):
+def get_rough_paths(inputs, outputs, route_file=None, current_gds=None):
     pathing_gui = gui.PathingGUI(tk, inputs, outputs, current_gds)
-    tk.mainloop()
+    if not route_file:
+        tk.mainloop()
+    else:
+        pathing_gui.set_route_file(open(route_file))
+        pathing_gui.autoroute()
     if pathing_gui.autoroute_paths is None:
         print("Autoroute was not called, exiting...")
         return None
@@ -265,8 +323,8 @@ def autoroute(
     r_vals,
     d_min,
     method="user",
+    route_file=None,
     current_gds=None,
-    initial_paths=None,
 ):
     """
     Generates a set of paths with waveguides connecting inputs ports to output ports.
@@ -288,7 +346,15 @@ def autoroute(
             Minimum distance between waveguides in GDS units
 
         method (str):
-            Minimum distance between waveguides in GDS units
+            One of "user" or "direct":
+                "user" - Slightly modifies user specified routes to give the desired waveguide layouts
+                "direct" - Generates a simple Manhattan route directly to the output ports without checking for crossover
+
+        route_file (str):
+            Path to a .route file with the desired initial paths
+
+        current_gds (str):
+            Path to the GDS for which the routes are being generated
 
     Returns:
         paths (list of WaveguidePaths):
@@ -305,15 +371,15 @@ def autoroute(
         paths = []
         for i in range(len(inputs)):
             port1, port2 = inputs[i], outputs[i]
-            paths.append(WaveguidePath(direct_route(port1, port2), width, r_vals))
+            paths.append(direct_route(port1, port2, width, r_vals))
         return paths
     elif method == "user":
         return user_route(
-            inputs, outputs, width, r_vals, d_min, initial_paths, current_gds
+            inputs, outputs, width, r_vals, d_min, route_file, current_gds
         )
 
 
-def write_paths_to_gds(paths, output_file, layer=0, datatype=0, geometry="flexpath"):
+def write_paths_to_gds(paths, output_file, layer=0, datatype=0, geometry="bend"):
     """
     Generates a set of paths with waveguides connecting inputs ports to output ports.
 
@@ -324,36 +390,28 @@ def write_paths_to_gds(paths, output_file, layer=0, datatype=0, geometry="flexpa
         output_file (str):
             Path to output GDS file
 
+        layer (int):
+            Desired GDS layer for waveguides
+
+        datatype (int):
+            Datatype label for GDS layer
+
         geometry (str):
-            One of "flexpath" or "bend".
-                "flexpath" - Each path is written as a single GDS flex path
+            One of "bend" or "rectilinear".
                 "bend" - Each path is written as separate straight and bend polygons
+                "rectilinear" - Each path is written as a single shape with no bends
 
     Returns:
         paths (list of WaveguidePaths):
             List of WaveguidePaths between their corresponding inputs and outputs
     """
-    if geometry == "flexpath":
-        lib = gdstk.Library()
-        cell = lib.new_cell("AUTOROUTE")
-        for path in paths:
-            fp = gdstk.FlexPath(
-                path.points,
-                path.width,
-                bend_radius=path.r_min,
-                simple_path=True,
-                layer=layer,
-                datatype=datatype,
-            )
-            cell.add(fp)
-        lib.write_gds(output_file)
-    elif geometry == "bend":
+    if geometry == "bend":
         for path in paths:
             points = path.points
             N = len(points)
             prev_tangent_len = 0
             for i in range(N - 1):
-                segment_len = utils.euclidean_distance(points[i], points[i + 1])
+                segment_len = path.get_length(i)
                 if i == N - 2:
                     nd.strt(
                         length=segment_len - prev_tangent_len,
@@ -366,7 +424,7 @@ def write_paths_to_gds(paths, output_file, layer=0, datatype=0, geometry="flexpa
                     new_tangent_len = (
                         0
                         if np.isclose(interior_angle, 0.0)
-                        else path.r_min / np.tan(interior_angle / 2)
+                        else path.bend_radii[i + 1] / np.tan(interior_angle / 2)
                     )
                     if i == 0:
                         starting_angle = utils.path_angle(
@@ -389,7 +447,7 @@ def write_paths_to_gds(paths, output_file, layer=0, datatype=0, geometry="flexpa
                         ).put()
                     nd.bend(
                         angle=np.degrees(angle),
-                        radius=path.r_min,
+                        radius=path.bend_radii[i + 1],
                         width=path.width,
                         layer=(layer, datatype),
                     ).put()
@@ -402,111 +460,45 @@ def write_paths_to_gds(paths, output_file, layer=0, datatype=0, geometry="flexpa
             fp = gdstk.FlexPath(path.points, path.width, layer=layer, datatype=datatype)
             cell.add(fp)
         lib.write_gds(output_file)
+    else:
+        raise TypeError(f"Invalid geometry type: {geometry}")
 
 
 if __name__ == "__main__":
-    paths = autoroute(
-        [
-            (5429.736, 2832.87, 180),
-            (5412.221, 2610.605, 180),
-            (5363.33, 2500.071, 180),
-            (5355.79, 2290.019, 180),
-            (5376.872, 2276.988, 180),
-            (5359.089, 2264.991, 180),
-            (5372.219, 2253.115, 180),
-            (5395.943, 2241.232, 180),
-        ],
-        [
-            (-300, 3163.777, 180),
-            (-300, 3153.777, 180),
-            (-300, 3143.777, 180),
-            (-300, 3125.5, 180),
-            (-300, 3098.5, 180),
-            (-300, 3071.5, 180),
-            (-300, 2528.777, 180),
-            (-300, 2508.777, 180),
-        ],
-        0.8,
-        [50],
-        10,
-        method="user",
-        # initial_paths=[
-        #     [
-        #         np.array([5429.736, 2832.87]),
-        #         np.array([2002.58084737, 2808.82035253]),
-        #         np.array([1989.29847368, 3256.23289862]),
-        #         np.array([-300.0, 3163.777]),
-        #     ],
-        #     [
-        #         np.array([5412.221, 2610.605]),
-        #         np.array([1874.18456842, 2667.06588249]),
-        #         np.array([1852.04727895, 3207.50479954]),
-        #         np.array([-300.0, 3153.777]),
-        #     ],
-        #     [
-        #         np.array([5363.33, 2500.071]),
-        #         np.array([1626.24692632, 2543.0307212]),
-        #         np.array([1599.68217895, 3141.05739171]),
-        #         np.array([-300.0, 3143.777]),
-        #     ],
-        #     [
-        #         np.array([5355.79, 2290.019]),
-        #         np.array([1334.03470526, 2294.96039862]),
-        #         np.array([1307.46995789, 3065.75032949]),
-        #         np.array([-300.0, 3125.5]),
-        #     ],
-        #     [
-        #         np.array([5376.872, 2276.988]),
-        #         np.array([1072.81468947, 2255.09195392]),
-        #         np.array([408.69600526, 3074.60998387]),
-        #         np.array([-300.0, 3098.5]),
-        #     ],
-        #     [
-        #         np.array([5359.089, 2264.991]),
-        #         np.array([780.60246842, 2228.51299078]),
-        #         np.array([27.93462632, 3074.60998387]),
-        #         np.array([-300.0, 3071.5]),
-        #     ],
-        #     [
-        #         np.array([5372.219, 2253.115]),
-        #         np.array([488.26726243, 2208.70181919]),
-        #         np.array([475.96876827, 2547.09139612]),
-        #         np.array([-300.0, 2528.777]),
-        #     ],
-        #     [
-        #         np.array([5395.943, 2241.232]),
-        #         np.array([306.86447368, 2190.2442059]),
-        #         np.array([276.1182383, 2519.40497619]),
-        #         np.array([-300.0, 2508.777]),
-        #     ],
-        # ],
-    )
     # paths = autoroute(
-    #     [(-4130, -3739, 0), (-4384, -3759, 0)],
-    #     [(2036, -2502, 0), (2152, -2497, 180)],
+    #     [
+    #         (5429.736, 2832.87, 180),
+    #         (5412.221, 2610.605, 180),
+    #         (5363.33, 2500.071, 180),
+    #         (5355.79, 2290.019, 180),
+    #         (5376.872, 2276.988, 180),
+    #         (5359.089, 2264.991, 180),
+    #         (5372.219, 2253.115, 180),
+    #         (5395.943, 2241.232, 180),
+    #     ],
+    #     [
+    #         (-300, 3163.777, 180),
+    #         (-300, 3153.777, 180),
+    #         (-300, 3143.777, 180),
+    #         (-300, 3125.5, 180),
+    #         (-300, 3098.5, 180),
+    #         (-300, 3071.5, 180),
+    #         (-300, 2528.777, 180),
+    #         (-300, 2508.777, 180),
+    #     ],
     #     0.8,
-    #     50,
+    #     [50],
     #     10,
-    #     method="user",
-    #     current_gds="/Users/rohan/Downloads/TOP_ALL_ASML.GDS",
-    #     # initial_paths=[
-    #     #     [
-    #     #         np.array([-4130.0, -3739.0]),
-    #     #         np.array([1714.95789474, -3648.85526316]),
-    #     #         np.array([1804.2, -2498.01315789]),
-    #     #         np.array([2036.0, -2502.0]),
-    #     #     ],
-    #     #     [
-    #     #         np.array([-4384.0, -3759.0]),
-    #     #         np.array([2384.27368421, -3748.06578947]),
-    #     #         np.array([2389.23157895, -2468.25]),
-    #     #         np.array([2152.0, -2497.0]),
-    #     #     ],
-    #     # ],
+    #     method="user"
     # )
-    write_paths_to_gds(
-        paths, "examples/autoroute.gds", layer=1, datatype=1, geometry="flexpath"
+    paths = autoroute(
+        [(-4130, -3739, 0), (-4384, -3759, 0)],
+        [(2036, -2502, 0), (2152, -2497, 180)],
+        0.8,
+        [20, 50],
+        10,
+        method="direct",
+        route_file="/Users/rohan/Downloads/grating_coupler.route",
+        current_gds="/Users/rohan/Downloads/TOP_ALL_ASML.GDS",
     )
-    write_paths_to_gds(
-        paths, "examples/autoroute_bend.gds", layer=1, datatype=1, geometry="bend"
-    )
+    write_paths_to_gds(paths, "examples/autoroute.gds", layer=1, datatype=1)

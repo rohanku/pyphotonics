@@ -417,59 +417,62 @@ class PathingGUI(ttk.Frame):
             self.clear_by_index(i)
         self.show_image()
 
+    def set_route_file(self, f):
+        lines = f.read().strip().split("\n")
+        if len(lines) < 1:
+            raise TypeError("No data found")
+        N = int(lines.pop(0))
+        if N != self.N:
+            messagebox.showerror("error", "Number of ports does not match!")
+            f.close()
+            return
+        if len(lines) != 3 * N:
+            raise TypeError("Incorrect number of lines")
+        inputs = []
+        for i in range(N):
+            data = lines.pop(0).strip().split()
+            if len(data) != 3:
+                raise TypeError("Invalid port specification")
+            inputs.append(tuple(map(float, data)))
+        outputs = []
+        for i in range(N):
+            data = lines.pop(0).strip().split()
+            if len(data) != 3:
+                raise TypeError("Invalid port specification")
+            outputs.append(tuple(map(float, data)))
+        for i in range(N):
+            if not utils.port_close(inputs[i], self.inputs[i]) or not utils.port_close(
+                outputs[i], self.outputs[i]
+            ):
+                messagebox.showerror("Ports do not correspond!")
+                f.close()
+                return
+        paths = []
+        path_terminated = []
+        for i in range(N):
+            data = lines.pop(0).strip().split()
+            cur_terminated = data.pop(0) == "*"
+            data = list(map(float, data))
+            if len(data) % 2 != 0:
+                raise TypeError("Invalid path specification")
+            path = []
+            for j in range(len(data) // 2):
+                path.append(np.array([data[2 * j], data[2 * j + 1]]))
+            path[0] = utils.get_port_coords(self.png_inputs[i])
+            if cur_terminated:
+                path[-1] = utils.get_port_coords(self.png_outputs[i])
+            paths.append(path)
+            path_terminated.append(cur_terminated)
+        self.current_paths = paths
+        self.path_terminated = path_terminated
+        self.show_image()
+
     def open(self, *args):
         f = filedialog.askopenfile()
         if f is None:
             return
         try:
-            lines = f.read().strip().split("\n")
-            if len(lines) < 1:
-                raise TypeError("No data found")
-            N = int(lines.pop(0))
-            if N != self.N:
-                messagebox.showerror("error", "Number of ports does not match!")
-                f.close()
-                return
-            if len(lines) != 3 * N:
-                raise TypeError("Incorrect number of lines")
-            inputs = []
-            for i in range(N):
-                data = lines.pop(0).strip().split()
-                if len(data) != 3:
-                    raise TypeError("Invalid port specification")
-                inputs.append(tuple(map(float, data)))
-            outputs = []
-            for i in range(N):
-                data = lines.pop(0).strip().split()
-                if len(data) != 3:
-                    raise TypeError("Invalid port specification")
-                outputs.append(tuple(map(float, data)))
-            for i in range(N):
-                if not utils.port_close(
-                    inputs[i], self.inputs[i]
-                ) or not utils.port_close(outputs[i], self.outputs[i]):
-                    messagebox.showerror("Ports do not correspond!")
-                    f.close()
-                    return
-            paths = []
-            path_terminated = []
-            for i in range(N):
-                data = lines.pop(0).strip().split()
-                cur_terminated = data.pop(0) == "*"
-                data = list(map(float, data))
-                if len(data) % 2 != 0:
-                    raise TypeError("Invalid path specification")
-                path = []
-                for j in range(len(data) // 2):
-                    path.append(np.array([data[2 * j], data[2 * j + 1]]))
-                path[0] = utils.get_port_coords(self.png_inputs[i])
-                if cur_terminated:
-                    path[-1] = utils.get_port_coords(self.png_outputs[i])
-                paths.append(path)
-                path_terminated.append(cur_terminated)
-            self.current_paths = paths
-            self.path_terminated = path_terminated
-            self.show_image()
+            self.set_route_file(f)
         except Exception as e:
             print(e)
             messagebox.showerror("error", "File is malformed!")
