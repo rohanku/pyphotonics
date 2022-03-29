@@ -114,7 +114,7 @@ class WaveguidePath:
             for j in range(1, self.N - 1):
                 curr_radius = self.bend_radii[j]
                 self.bend_radii[j] = self.r_vals[i]
-                if self.minimum_length(j) > self.get_length(j):
+                if self.minimum_length(j) > self.get_length(j) or self.minimum_length(j-1) > self.get_length(j-1):
                     self.bend_radii[j] = curr_radius
 
 
@@ -497,7 +497,7 @@ if __name__ == "__main__":
         0.8,
         [20, 50],
         10,
-        method="direct",
+        method="user",
         route_file="/Users/rohan/Downloads/grating_coupler.route",
         current_gds="/Users/rohan/Downloads/TOP_ALL_ASML.GDS",
     )

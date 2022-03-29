@@ -1,9 +1,6 @@
 from pyphotonics.simulation import lumerical, modes, structure
 import numpy as np
 import os, string, random
-import matplotlib.pyplot as plt
-from scipy.constants import c
-import signal, multiprocessing
 
 lumapi = lumerical.lumapi
 
@@ -232,12 +229,14 @@ def soi_characterize_bend_varfdtd(
             z_span=10 * soi.si_t,
         )
 
-        print("Saving simulation file...")
         # Create temporary simulation folder and wait for user input before running if interactive
-        os.makedirs("/tmp/pyphotonics/bend_char", exist_ok=True)
+        tmp_dir = "/tmp/pyphotonics/bend_char"
+        os.makedirs(tmp_dir, exist_ok=True)
         tag = "".join(random.choice(string.ascii_letters) for i in range(10))
+        fname = f"{tmp_dir}/width_{int(width*1e9)}nm_radius_{int(radius*1e9)}nm_angle_{int(angle)}_{tag}.lms"
+        print(f"Saving simulation file as {fname}...")
         mode.save(
-            f"/tmp/optics_lib/bend_char/width_{int(width*1e9)}nm_radius_{int(radius*1e9)}nm_angle_{int(angle)}_{tag}.lms"
+            fname
         )
         if interactive:
             input("Press Enter to continue...")

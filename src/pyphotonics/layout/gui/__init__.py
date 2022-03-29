@@ -31,7 +31,8 @@ class PathingGUI(ttk.Frame):
         if current_gds:
             # Retrieve screenshot of the provided GDS file
             tag = "".join(random.choice(string.ascii_letters) for i in range(10))
-            path = f"/tmp/pyphotonics/{tag}.png"
+            os.makedirs("/tmp/pyphotonics/autoroute", exist_ok=True)
+            path = f"/tmp/pyphotonics/autoroute/{tag}.png"
 
             gds_to_png_abs_path = os.path.join(
                 os.path.dirname(__file__), "../klayout/gds_to_png.py"
