@@ -1,14 +1,16 @@
 def get_fundamental_te_mode(sim):
     """
-    Retrieves the number of the fundamental TE mode of the mode source selected in the given Lumerical simulation object.
+    Retrieves the number of the fundamental TE mode of the mode source selected in the given Lumerical simulation.
 
-    Parameters:
-        sim:
-            Lumerical API simulation object.
+    Parameters
+    ----------
+    sim: Lumerical API simulation object
+        Simulation with mode source of interest selected.
 
-    Returns:
-        mode_num (int):
-            Fundamental TE mode number. Returns -1 if a TE mode could not be found.
+    Returns
+    -------
+    mode_num : int
+        Fundamental TE mode number. Returns -1 if a TE mode could not be found.
     """
 
     # Store original mode source name

@@ -6,9 +6,15 @@
 Welcome to pyphotonics's documentation!
 =======================================
 
+**Pyphotonics** is a Python library for automated photonic circuit design.
+
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 1
+   :titlesonly:
    :caption: Contents:
+
+   getting_started
+   api
 
 
 

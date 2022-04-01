@@ -1,11 +1,10 @@
-from pyphotonics.simulation import lumerical, modes, structure
+from pyphotonics.simulation import lumerical, sources, structure
 import numpy as np
 import os, string, random
 
 lumapi = lumerical.lumapi
 
-
-def soi_characterize_bend_varfdtd(
+def soi_bend_char_varfdtd(
     soi,
     width,
     radius,
@@ -16,41 +15,34 @@ def soi_characterize_bend_varfdtd(
     io_buffer=3,
     mesh_buffer=None,
 ):
-    tag = "".join(random.choice(string.ascii_letters) for i in range(10))
     """
     Returns the transmission of an SOI slab waveguide bend of a given width, radius, and angle at a given wavelength.
 
-    Parameters:
-        soi (structure.SOI):
-            SOI object with the desired parameters
+    Parameters
+    ----------
+    soi : structure.SOI
+        SOI object with the desired parameters.
+    width : double
+        Waveguide width in meters.
+    radius : double
+        Bend radius in meters.
+    angle : double
+        Bend angle in degrees.
+    wavelength : double
+        Target wavelength in meters.
+    interactive : bool
+        Interactive mode opens the created simulation for inspection before running.
+    sim_time : double
+        Simulation time in seconds.
+    io_buffer : double
+        Spacing between bend and the input source/output monitor relative to wavelength.
+    mesh_buffer : double
+        Buffer around input waveguide and bend for meshes to span in meters. Defaults to no mesh.
 
-        width (double):
-            Waveguide width in meters
-
-        radius (double):
-            Bend radius in meters
-
-        angle (double):
-            Bend angle in degrees
-
-        wavelength (double):
-            Target wavelength in meters
-
-        interactive (bool):
-            Interactive mode opens the created simulation for inspection before running
-
-        sim_time (double):
-            Simulation time in seconds
-
-        io_buffer (double):
-            Spacing between bend and the input source/output monitor relative to wavelength
-
-        mesh_buffer (double):
-            Buffer around input waveguide and bend for meshes to span in meters. Defaults to no mesh.
-
-    Returns:
-        T (double):
-            Bend transmission as measured at output monitor
+    Returns
+    -------
+    T : double
+        Bend transmission as measured at output monitor in dB.
     """
     # Validate radius
     if radius < width / 2:
@@ -200,7 +192,7 @@ def soi_characterize_bend_varfdtd(
             )
 
         # Calculate fundamental TE mode of input waveguide and update mode source
-        mode_num = modes.get_fundamental_te_mode(mode)
+        mode_num = sources.get_fundamental_te_mode(mode)
         if mode_num == -1:
             raise ValueError("Failed to find fundamental TE mode for given parameters")
         mode.updatesourcemode(mode_num)
@@ -235,9 +227,7 @@ def soi_characterize_bend_varfdtd(
         tag = "".join(random.choice(string.ascii_letters) for i in range(10))
         fname = f"{tmp_dir}/width_{int(width*1e9)}nm_radius_{int(radius*1e9)}nm_angle_{int(angle)}_{tag}.lms"
         print(f"Saving simulation file as {fname}...")
-        mode.save(
-            fname
-        )
+        mode.save(fname)
         if interactive:
             input("Press Enter to continue...")
 
@@ -255,7 +245,7 @@ def soi_characterize_bend_varfdtd(
 if __name__ == "__main__":
     for angle in range(40, 70, 10):
         print(
-            soi_characterize_bend_varfdtd(
+            soi_bend_char_varfdtd(
                 structure.SOI(), 800e-9, 50e-6, angle, 1.762e-6
             )
         )
