@@ -24,3 +24,10 @@ Pyphotonics has two main modules:
 :ref:`Simulation <Simulation>`
   Functions for automated device characterization with Lumerical simulations.
 
+Tutorials
+---------
+
+.. toctree::
+
+   autorouting
+
