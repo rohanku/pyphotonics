@@ -4,12 +4,12 @@ import bisect
 
 def get_port_coords(port):
     """Returns the coordinates as a numpy array of a port represented as an (x, y, angle) 3-tuple"""
-    return np.array([port[0], port[1]])
+    return np.array([port.x, port.y])
 
 
 def port_close(port1, port2):
     """Checks if two ports are the same"""
-    return all(map(lambda x: np.isclose(x[0], x[1]), zip(port1, port2)))
+    return all(map(lambda x: np.isclose(x[0], x[1]), zip(port1.as_tuple(), port2.as_tuple())))
 
 
 def euclidean_distance(p1, p2):
@@ -104,8 +104,8 @@ def ray_project(p1, angle, p2):
 
 def get_perpendicular_directions(port1, port2):
     """Returns the appropriate port directions such that they face each other at a 90 degree angle. The first element gives an x axis direction for port 1."""
-    dx = port2[0] - port1[0]
-    dy = port2[1] - port1[1]
+    dx = port2.x - port1.x
+    dy = port2.y - port1.y
     if dx >= 0 and dy >= 0:
         return [(0, 90), (90, 0)]
     if dx < 0 and dy >= 0:
@@ -133,29 +133,29 @@ def get_port_polygons(ports, l, w):
     polys = []
     for port in ports:
         poly = []
-        rad_angle = np.radians(port[2])
+        rad_angle = np.radians(port.angle)
         poly.append(
-            [port[0] - w / 2 * np.sin(rad_angle), port[1] + w / 2 * np.cos(rad_angle)]
+            [port.x - w / 2 * np.sin(rad_angle), port.y + w / 2 * np.cos(rad_angle)]
         )
         poly.append(
-            [port[0] + w / 2 * np.sin(rad_angle), port[1] - w / 2 * np.cos(rad_angle)]
+            [port.x + w / 2 * np.sin(rad_angle), port.y - w / 2 * np.cos(rad_angle)]
         )
         poly.append(
             [
-                port[0] + w / 2 * np.sin(rad_angle) + l * np.cos(rad_angle),
-                port[1] - w / 2 * np.cos(rad_angle) + l * np.sin(rad_angle),
+                port.x + w / 2 * np.sin(rad_angle) + l * np.cos(rad_angle),
+                port.y - w / 2 * np.cos(rad_angle) + l * np.sin(rad_angle),
             ]
         )
         poly.append(
             [
-                port[0] + 1.5 * l * np.cos(rad_angle),
-                port[1] + 1.5 * l * np.sin(rad_angle),
+                port.x + 1.5 * l * np.cos(rad_angle),
+                port.y + 1.5 * l * np.sin(rad_angle),
             ]
         )
         poly.append(
             [
-                port[0] - w / 2 * np.sin(rad_angle) + l * np.cos(rad_angle),
-                port[1] + w / 2 * np.cos(rad_angle) + l * np.sin(rad_angle),
+                port.x - w / 2 * np.sin(rad_angle) + l * np.cos(rad_angle),
+                port.y + w / 2 * np.cos(rad_angle) + l * np.sin(rad_angle),
             ]
         )
         polys.append(poly)

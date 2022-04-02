@@ -2,9 +2,6 @@
 requires = [
     "setuptools>=42",
     "wheel",
-    "nazca",
-    "numpy",
-    "tk",
-    "gdstk"
 ]
+
 build-backend = "setuptools.build_meta"

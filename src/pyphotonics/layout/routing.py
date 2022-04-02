@@ -5,6 +5,17 @@ from pyphotonics.layout import utils, gui
 
 tk = Tk()
 
+class Port:
+    def __init__(self, x, y, angle):
+        self.x = x
+        self.y = y
+        self.angle = angle
+
+    def as_tuple(self):
+        """
+        Converts this Port object into a 3-tuple (x,y,angle).
+        """
+        return (self.x, self.y, self.angle)
 
 class WaveguidePath:
     """
@@ -200,9 +211,9 @@ def get_rough_paths(inputs, outputs, route_file=None, current_gds=None):
 
     Parameters
     ----------
-    inputs : list[3-tuple]
+    inputs : list[Port]
         List of input ports represented by (x, y, angle), where angle is degrees counter-clockwise from the horizontal.
-    outputs : list[3-tuple]
+    outputs : list[Port]
         List of output ports represented by (x, y, angle), where angle is degrees counter-clockwise from the horizontal.
     route_file : str
         Path to a .route file with the desired initial paths.
@@ -234,7 +245,7 @@ def turn_port_route(
 
     Parameters
     ----------
-    port : 3-tuple
+    port : Port
         Port represented by (x, y, angle), where angle is degrees counter-clockwise from the horizontal.
     r_min : double:
         The minimum radius for executing the turn.
@@ -250,11 +261,11 @@ def turn_port_route(
     bend : list[numpy tuple]
         3- or 4-point bend that turns the given port to the desired angle.
     """
-    bend_angle = (target_angle - port[2]) % 360
+    bend_angle = (target_angle - port.angle) % 360
     if bend_angle > 180:
         bend_angle -= 360
     bend_angle_rad = np.radians(bend_angle)
-    port_angle_rad = np.radians(port[2])
+    port_angle_rad = np.radians(port.angle)
 
     # Define the curve to arrive at the target angle using 4 points
     start = utils.get_port_coords(port)
@@ -300,9 +311,9 @@ def direct_route(port1, port2, width, r_vals, x_first=None):
 
     Parameters
     ----------
-    port1 : 3-tuple
+    port1 : Port
         Input port represented by (x, y, angle), where angle is degrees counter-clockwise from the horizontal
-    port2 : 3-tuple
+    port2 : Port
         Output port represented by (x, y, angle), where angle is degrees counter-clockwise from the horizontal
     width : float
         Width of waveguides in GDS units
@@ -325,8 +336,8 @@ def direct_route(port1, port2, width, r_vals, x_first=None):
         np.argmin(
             list(
                 map(
-                    lambda x: abs((port1[2] - x[0]) % 360)
-                    + abs((port2[2] - x[1]) % 360),
+                    lambda x: abs((port1.angle - x[0]) % 360)
+                    + abs((port2.angle - x[1]) % 360),
                     dirs,
                 )
             )
@@ -356,9 +367,9 @@ def user_route(
 
     Parameters
     ----------
-    inputs : list[3-tuple]
+    inputs : list[Port]
         List of input ports represented by (x, y, angle), where angle is degrees counter-clockwise from the horizontal.
-    outputs : list[3-tuple]
+    outputs : list[Port]
         List of output ports represented by (x, y, angle), where angle is degrees counter-clockwise from the horizontal.
     width : double
         Width of waveguides in GDS units.
