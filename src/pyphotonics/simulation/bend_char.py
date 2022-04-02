@@ -240,12 +240,3 @@ def soi_bend_char_varfdtd(
         T = -T["T"][0]
 
     return -10 * np.log10(T)
-
-
-if __name__ == "__main__":
-    for angle in range(40, 70, 10):
-        print(
-            soi_bend_char_varfdtd(
-                structure.SOI(), 800e-9, 50e-6, angle, 1.762e-6
-            )
-        )

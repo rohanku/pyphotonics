@@ -1,8 +1,5 @@
 import gdstk
 import numpy as np
-import nazca as nd
-import nazca.geometries as ng
-from nazca.interconnects import Interconnect
 from tkinter import *
 from pyphotonics.layout import utils, gui
 
@@ -66,7 +63,7 @@ class WaveguidePath:
 
     def get_length(self, index):
         """
-                Returns the length of the given path segment.
+        Returns the length of the given path segment.
 
         Parameters
         ---------
@@ -94,7 +91,7 @@ class WaveguidePath:
         Returns
         -------
         min_length : float
-            Minimum lidean length of specificied segment in path.
+            Minimum length of specificied segment in path.
         """
         if index < 0 or index > self.N - 2:
             raise TypeError("Segment index must be between in [0, len(path)-1)")
@@ -308,7 +305,7 @@ def turn_port_route(
     return [start, start + inter1, start + inter2]
 
 
-def direct_route(port1, port2, width, r_vals):
+def direct_route(port1, port2, width, r_vals, x_first=None):
     """
     Returns a basic two segment route between two ports, adding segments as necessary to account for port angle.
 
@@ -322,6 +319,8 @@ def direct_route(port1, port2, width, r_vals):
         Width of waveguides in GDS units
     r_vals : list[float]
         Possible bend radii in GDS units
+    x_first : bool or None
+        Determines whether the Manhattan bend traverses the x axis or y axis first. If None, the direction that minimizes bends is chosen.
 
     Returns
     -------
@@ -343,7 +342,7 @@ def direct_route(port1, port2, width, r_vals):
                 )
             )
         )
-    ]
+    ] if x_first is None else dirs[0 if x_first else 1]
 
     # Turn ports to the desired angle
     points1 = turn_port_route(port1, min(r_vals), best_dir[0])
@@ -451,18 +450,21 @@ def write_paths_to_gds(paths, output_file, layer=0, datatype=0, geometry="bend")
         List of WaveguidePaths between their corresponding inputs and outputs.
     """
     if geometry == "bend":
+        lib = gdstk.Library()
+        cell = lib.new_cell("AUTOROUTE")
         for path in paths:
             points = path.points
             N = len(points)
             prev_tangent_len = 0
+            curr_point = points[0]
             for i in range(N - 1):
                 segment_len = path.get_length(i)
                 if i == N - 2:
-                    nd.strt(
-                        length=segment_len - prev_tangent_len,
-                        width=path.width,
-                        layer=(layer, datatype),
-                    ).put()
+                    rp = gdstk.FlexPath(curr_point, 0.8, layer=layer, datatype=datatype)
+                    rp.segment(
+                        points[i+1]
+                    )
+                    cell.add(rp)
                 else:
                     angle = utils.path_angle(points[i], points[i + 1], points[i + 2])
                     interior_angle = np.pi - np.abs(angle)
@@ -471,33 +473,24 @@ def write_paths_to_gds(paths, output_file, layer=0, datatype=0, geometry="bend")
                         if np.isclose(interior_angle, 0.0)
                         else path.bend_radii[i + 1] / np.tan(interior_angle / 2)
                     )
-                    if i == 0:
-                        starting_angle = utils.path_angle(
-                            (points[i][0] - 1, points[i][1]), points[i], points[i + 1]
-                        )
-                        nd.strt(
-                            length=segment_len - prev_tangent_len - new_tangent_len,
-                            width=path.width,
-                            layer=(layer, datatype),
-                        ).put(
-                            float(points[i][0]),
-                            float(points[i][1]),
-                            np.degrees(starting_angle),
-                        )
-                    else:
-                        nd.strt(
-                            length=segment_len - prev_tangent_len - new_tangent_len,
-                            width=path.width,
-                            layer=(layer, datatype),
-                        ).put()
-                    nd.bend(
-                        angle=np.degrees(angle),
-                        radius=path.bend_radii[i + 1],
-                        width=path.width,
-                        layer=(layer, datatype),
-                    ).put()
+                    horiz_angle = utils.horizontal_angle(points[i+1] - points[i])
+
+                    rp = gdstk.FlexPath(curr_point, 0.8, tolerance=1e-3, layer=layer, datatype=datatype)
+                    curr_point += (segment_len - prev_tangent_len - new_tangent_len) * np.array([np.cos(horiz_angle), np.sin(horiz_angle)])
+                    rp.segment(
+                        curr_point
+                    )
+                    cell.add(rp)
+
+                    start_angle = horiz_angle - np.pi/2
+                    if angle < 0:
+                        start_angle = utils.reverse_angle(start_angle)
+                    rp = gdstk.FlexPath(curr_point, 0.8, tolerance=1e-3, layer=layer, datatype=datatype)
+                    rp.arc(path.bend_radii[i+1], start_angle, start_angle + angle)
+                    cell.add(rp)
+                    curr_point = points[i+1] + (points[i+2] - points[i+1])/path.get_length(i+1) * new_tangent_len
                     prev_tangent_len = new_tangent_len
-        nd.export_gds(filename=output_file)
+        lib.write_gds(output_file)
     elif geometry == "rectilinear":
         lib = gdstk.Library()
         cell = lib.new_cell("AUTOROUTE")
@@ -508,42 +501,3 @@ def write_paths_to_gds(paths, output_file, layer=0, datatype=0, geometry="bend")
     else:
         raise TypeError(f"Invalid geometry type: {geometry}")
 
-
-if __name__ == "__main__":
-    # paths = autoroute(
-    #     [
-    #         (5429.736, 2832.87, 180),
-    #         (5412.221, 2610.605, 180),
-    #         (5363.33, 2500.071, 180),
-    #         (5355.79, 2290.019, 180),
-    #         (5376.872, 2276.988, 180),
-    #         (5359.089, 2264.991, 180),
-    #         (5372.219, 2253.115, 180),
-    #         (5395.943, 2241.232, 180),
-    #     ],
-    #     [
-    #         (-300, 3163.777, 180),
-    #         (-300, 3153.777, 180),
-    #         (-300, 3143.777, 180),
-    #         (-300, 3125.5, 180),
-    #         (-300, 3098.5, 180),
-    #         (-300, 3071.5, 180),
-    #         (-300, 2528.777, 180),
-    #         (-300, 2508.777, 180),
-    #     ],
-    #     0.8,
-    #     [50],
-    #     10,
-    #     method="user"
-    # )
-    paths = autoroute(
-        [(-4130, -3739, 0), (-4384, -3759, 0)],
-        [(2036, -2502, 0), (2152, -2497, 180)],
-        0.8,
-        [20, 50],
-        10,
-        method="user",
-        route_file="/Users/rohan/Downloads/grating_coupler.route",
-        current_gds="/Users/rohan/Downloads/TOP_ALL_ASML.GDS",
-    )
-    write_paths_to_gds(paths, "examples/autoroute.gds", layer=1, datatype=1)
