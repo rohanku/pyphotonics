@@ -103,17 +103,17 @@ def ray_project(p1, angle, p2):
 
 
 def get_perpendicular_directions(port1, port2):
-    """Returns the appropriate port directions such that they face each other at a 90 degree angle"""
+    """Returns the appropriate port directions such that they face each other at a 90 degree angle. The first element gives an x axis direction for port 1."""
     dx = port2[0] - port1[0]
     dy = port2[1] - port1[1]
     if dx >= 0 and dy >= 0:
         return [(0, 90), (90, 0)]
     if dx < 0 and dy >= 0:
-        return [(90, 180), (180, 90)]
+        return [(180, 90), (90, 180)]
     if dx < 0 and dy < 0:
         return [(180, -90), (-90, 180)]
     if dx >= 0 and dy < 0:
-        return [(-90, 0), (0, -90)]
+        return [(0, -90), (-90, 0)]
 
 
 def get_bounding_box(points, padding=0):
