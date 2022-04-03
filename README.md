@@ -1,6 +1,6 @@
 # Pyphotonics
 
-Tools for automated photonic circuit design.
+Tools for automated photonic circuit design. For more information, check out the [documentation](https://pyphotonics.readthedocs.io/en/latest/index.html).
 
 ## Setup
 
