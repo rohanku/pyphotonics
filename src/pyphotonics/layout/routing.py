@@ -5,6 +5,7 @@ from pyphotonics.layout import utils, gui
 
 tk = Tk()
 
+
 class Port:
     """
     Connection port for waveguide routing.
@@ -21,6 +22,7 @@ class Port:
     Attributes
     ----------
     """
+
     def __init__(self, x, y, angle):
         self.x = x
         self.y = y
@@ -36,6 +38,7 @@ class Port:
             (x,y,angle) representation of port.
         """
         return (self.x, self.y, self.angle)
+
 
 class WaveguidePath:
     """
@@ -356,26 +359,32 @@ def direct_route(port1, port2, width, r_vals, x_first=None):
 
     port_coords1 = utils.get_port_coords(port1)
     port_coords2 = utils.get_port_coords(port2)
-    if np.isclose(port_coords1[0], port_coords2[0]) or np.isclose(port_coords1[1], port_coords2[1]):
+    if np.isclose(port_coords1[0], port_coords2[0]) or np.isclose(
+        port_coords1[1], port_coords2[1]
+    ):
         horiz_angle = utils.horizontal_angle(port_coords2 - port_coords1)
-        if np.isclose(horiz_angle, np.radians(port1.angle)) and np.isclose(horiz_angle, np.radians(port2.angle)):
-            return WaveguidePath(
-                [port_coords1, port_coords2], width, r_vals
-            )
+        if np.isclose(horiz_angle, np.radians(port1.angle)) and np.isclose(
+            horiz_angle, np.radians(port2.angle)
+        ):
+            return WaveguidePath([port_coords1, port_coords2], width, r_vals)
 
     # Determine the best set of directions for the given ports to be bent to minimize total bend angle
     dirs = utils.get_perpendicular_directions(port1, port2)
-    best_dir = dirs[
-        np.argmin(
-            list(
-                map(
-                    lambda x: abs((port1.angle - x[0]) % 360)
-                    + abs((port2.angle - x[1]) % 360),
-                    dirs,
+    best_dir = (
+        dirs[
+            np.argmin(
+                list(
+                    map(
+                        lambda x: abs((port1.angle - x[0]) % 360)
+                        + abs((port2.angle - x[1]) % 360),
+                        dirs,
+                    )
                 )
             )
-        )
-    ] if x_first is None else dirs[0 if x_first else 1]
+        ]
+        if x_first is None
+        else dirs[0 if x_first else 1]
+    )
 
     # Turn ports to the desired angle
     points1 = turn_port_route(port1, min(r_vals), best_dir[0])
@@ -496,9 +505,7 @@ def write_paths_to_gds(paths, output_file, layer=0, datatype=0, geometry="bend")
                 segment_len = path.get_length(i)
                 if i == N - 2:
                     rp = gdstk.FlexPath(curr_point, 0.8, layer=layer, datatype=datatype)
-                    rp.segment(
-                        points[i+1]
-                    )
+                    rp.segment(points[i + 1])
                     cell.add(rp)
                 else:
                     angle = utils.path_angle(points[i], points[i + 1], points[i + 2])
@@ -508,22 +515,31 @@ def write_paths_to_gds(paths, output_file, layer=0, datatype=0, geometry="bend")
                         if np.isclose(interior_angle, 0.0)
                         else path.bend_radii[i + 1] / np.tan(interior_angle / 2)
                     )
-                    horiz_angle = utils.horizontal_angle(points[i+1] - points[i])
+                    horiz_angle = utils.horizontal_angle(points[i + 1] - points[i])
 
-                    rp = gdstk.FlexPath(curr_point, 0.8, tolerance=1e-3, layer=layer, datatype=datatype)
-                    curr_point += (segment_len - prev_tangent_len - new_tangent_len) * np.array([np.cos(horiz_angle), np.sin(horiz_angle)])
-                    rp.segment(
-                        curr_point
+                    rp = gdstk.FlexPath(
+                        curr_point, 0.8, tolerance=1e-3, layer=layer, datatype=datatype
                     )
+                    curr_point += (
+                        segment_len - prev_tangent_len - new_tangent_len
+                    ) * np.array([np.cos(horiz_angle), np.sin(horiz_angle)])
+                    rp.segment(curr_point)
                     cell.add(rp)
 
-                    start_angle = horiz_angle - np.pi/2
+                    start_angle = horiz_angle - np.pi / 2
                     if angle < 0:
                         start_angle = utils.reverse_angle(start_angle)
-                    rp = gdstk.FlexPath(curr_point, 0.8, tolerance=1e-3, layer=layer, datatype=datatype)
-                    rp.arc(path.bend_radii[i+1], start_angle, start_angle + angle)
+                    rp = gdstk.FlexPath(
+                        curr_point, 0.8, tolerance=1e-3, layer=layer, datatype=datatype
+                    )
+                    rp.arc(path.bend_radii[i + 1], start_angle, start_angle + angle)
                     cell.add(rp)
-                    curr_point = points[i+1] + (points[i+2] - points[i+1])/path.get_length(i+1) * new_tangent_len
+                    curr_point = (
+                        points[i + 1]
+                        + (points[i + 2] - points[i + 1])
+                        / path.get_length(i + 1)
+                        * new_tangent_len
+                    )
                     prev_tangent_len = new_tangent_len
         lib.write_gds(output_file)
     elif geometry == "rectilinear":
@@ -535,4 +551,3 @@ def write_paths_to_gds(paths, output_file, layer=0, datatype=0, geometry="bend")
         lib.write_gds(output_file)
     else:
         raise TypeError(f"Invalid geometry type: {geometry}")
-

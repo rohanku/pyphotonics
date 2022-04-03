@@ -4,6 +4,7 @@ import os, string, random
 
 lumapi = lumerical.lumapi
 
+
 def soi_bend_char_varfdtd(
     soi,
     width,
