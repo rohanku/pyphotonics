@@ -2,6 +2,8 @@ Routing
 =======
 
 .. currentmodule:: pyphotonics.layout.routing
+.. autoclass:: Port
+   :members:
 .. autoclass:: WaveguidePath
    :members:
 

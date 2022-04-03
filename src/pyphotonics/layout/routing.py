@@ -6,6 +6,21 @@ from pyphotonics.layout import utils, gui
 tk = Tk()
 
 class Port:
+    """
+    Connection port for waveguide routing.
+
+    Attributes
+    ----------
+    x : float
+        GDS x coordinate.
+    y : float
+        GDS y coordinate.
+    angle : float
+        Angle from positive x axis in degrees.
+
+    Attributes
+    ----------
+    """
     def __init__(self, x, y, angle):
         self.x = x
         self.y = y
@@ -14,6 +29,11 @@ class Port:
     def as_tuple(self):
         """
         Converts this Port object into a 3-tuple (x,y,angle).
+
+        Returns
+        ------
+        port_tuple : 3-tuple
+            (x,y,angle) representation of port.
         """
         return (self.x, self.y, self.angle)
 
@@ -163,7 +183,7 @@ class WaveguidePath:
             path[index + 1],
             utils.horizontal_angle(path[index + 2] - path[index + 1]),
         )
-        if p1 or p2 is None:
+        if p1 is None or p2 is None:
             raise TypeError(
                 "No intersection found for shifted segment. This may be due to redundant points, call trim() first to fix this error"
             )
@@ -241,12 +261,12 @@ def turn_port_route(
     port, r_min, target_angle, reverse=False, four_point_threshold=10.0
 ):
     """
-    Returns a 3- or 4-point bend that turns the given port to the desired angle
+    Returns a 3- or 4-point bend that turns the given port to the desired angle.
 
     Parameters
     ----------
     port : Port
-        Port represented by (x, y, angle), where angle is degrees counter-clockwise from the horizontal.
+        Port to turn to target angle.
     r_min : double:
         The minimum radius for executing the turn.
     target_angle : double
@@ -307,14 +327,14 @@ def turn_port_route(
 
 def direct_route(port1, port2, width, r_vals, x_first=None):
     """
-    Returns a basic two segment route between two ports, adding segments as necessary to account for port angle.
+    Returns a basic two segment Manhattan route between two ports, adding segments as necessary to account for port angle.
 
     Parameters
     ----------
     port1 : Port
-        Input port represented by (x, y, angle), where angle is degrees counter-clockwise from the horizontal
+        Input port.
     port2 : Port
-        Output port represented by (x, y, angle), where angle is degrees counter-clockwise from the horizontal
+        Output port.
     width : float
         Width of waveguides in GDS units
     r_vals : list[float]
@@ -326,9 +346,22 @@ def direct_route(port1, port2, width, r_vals, x_first=None):
     -------
     path : WaveguidePath
         WaveguidePath between input and output port.
+
+    Warning
+    -------
+    :meth:`direct_route` does not account for waveguide crossings or obstacles and simply connects two ports in the most efficient way possible. Crossings can be avoided by offsetting ports slightly from one another or using the ``x_first`` parameter. It may also not work for cases where the ports cannot be connected by a simple two segment path.
     """
     if len(r_vals) == 0 or min(r_vals) <= 0:
         raise ValueError("Minimum radius must be positive")
+
+    port_coords1 = utils.get_port_coords(port1)
+    port_coords2 = utils.get_port_coords(port2)
+    if np.isclose(port_coords1[0], port_coords2[0]) or np.isclose(port_coords1[1], port_coords2[1]):
+        horiz_angle = utils.horizontal_angle(port_coords2 - port_coords1)
+        if np.isclose(horiz_angle, np.radians(port1.angle)) and np.isclose(horiz_angle, np.radians(port2.angle)):
+            return WaveguidePath(
+                [port_coords1, port_coords2], width, r_vals
+            )
 
     # Determine the best set of directions for the given ports to be bent to minimize total bend angle
     dirs = utils.get_perpendicular_directions(port1, port2)
@@ -353,7 +386,6 @@ def direct_route(port1, port2, width, r_vals, x_first=None):
     # Add intermediate point for manhattan routing
     coords1 = points1[-1] if best_dir[0] == 90 or best_dir[0] == -90 else points2[0]
     coords2 = points2[0] if best_dir[0] == 90 or best_dir[0] == -90 else points1[-1]
-
     return WaveguidePath(
         points1 + [np.array([coords1[0], coords2[1]])] + points2, width, r_vals
     )
@@ -368,9 +400,9 @@ def user_route(
     Parameters
     ----------
     inputs : list[Port]
-        List of input ports represented by (x, y, angle), where angle is degrees counter-clockwise from the horizontal.
+        List of input ports.
     outputs : list[Port]
-        List of output ports represented by (x, y, angle), where angle is degrees counter-clockwise from the horizontal.
+        List of output ports such that each input port corresponds to the output port at the same index.
     width : double
         Width of waveguides in GDS units.
     r_vals : list of doubles
@@ -384,8 +416,8 @@ def user_route(
 
     Returns
     -------
-    path : WaveguidePath
-        WaveguidePath between input and output port
+    paths : WaveguidePath
+        WaveguidePaths between each input and output port.
     """
 
     if len(inputs) != len(outputs):
@@ -401,6 +433,9 @@ def user_route(
     final_paths = []
     for i in range(len(inputs)):
         path = initial_paths[i]
+        if len(path) == 2:
+            final_paths.append(WaveguidePath(path, width, r_vals))
+            continue
         curr_dir = utils.manhattan_angle(utils.horizontal_angle(path[1] - path[0]))
         manhattan_path = turn_port_route(inputs[i], min(r_vals), np.degrees(curr_dir))
         for j in range(1, len(path) - 2):

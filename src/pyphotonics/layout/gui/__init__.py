@@ -1,6 +1,6 @@
 import numpy as np
 import os
-from pyphotonics.layout import utils
+from pyphotonics.layout import utils, routing
 import random
 import string
 from tkinter import *
@@ -483,9 +483,9 @@ class PathingGUI(ttk.Frame):
         with open(self.current_file, "w") as f:
             f.write(f"{self.N}\n")
             for i in range(self.N):
-                f.write(f"{' '.join(map(str, self.inputs[i]))}\n")
+                f.write(f"{' '.join(map(str, self.inputs[i].as_tuple()))}\n")
             for i in range(self.N):
-                f.write(f"{' '.join(map(str, self.outputs[i]))}\n")
+                f.write(f"{' '.join(map(str, self.outputs[i].as_tuple()))}\n")
             for i in range(self.N):
                 f.write(
                     f"{'*' if self.path_terminated[i] else '-'} {' '.join(map(lambda x: f'{x[0]} {x[1]}', self.current_paths[i]))}\n"
@@ -589,7 +589,7 @@ class PathingGUI(ttk.Frame):
     def get_png_port(self, port):
         """Convert a single port's GDS coordinates to coordinates on the canvas"""
         png_coords = self.get_png_coords(utils.get_port_coords(port))
-        return (png_coords[0], png_coords[1], port[2])
+        return routing.Port(png_coords[0], png_coords[1], port.angle)
 
     def get_png_ports(self, ports):
         """Convert port GDS coordinates to coordinates on the canvas"""
