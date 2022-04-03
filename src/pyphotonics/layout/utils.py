@@ -9,7 +9,9 @@ def get_port_coords(port):
 
 def port_close(port1, port2):
     """Checks if two ports are the same"""
-    return all(map(lambda x: np.isclose(x[0], x[1]), zip(port1.as_tuple(), port2.as_tuple())))
+    return all(
+        map(lambda x: np.isclose(x[0], x[1]), zip(port1.as_tuple(), port2.as_tuple()))
+    )
 
 
 def euclidean_distance(p1, p2):
