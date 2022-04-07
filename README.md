@@ -6,7 +6,7 @@ Tools for automated photonic circuit design. For more information, check out the
 
 To install Pyphotonics, run the following commands:
 ```Bash
-git clone git@github.com:rohanku/pyphotonics.git
+git clone https://github.com/rohanku/pyphotonics.git
 cd pyphotonics
 pip install -e .
 ```
