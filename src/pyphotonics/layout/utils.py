@@ -1,17 +1,11 @@
 import numpy as np
 import bisect
+from pyphotonics.layout import routing
 
 
 def get_port_coords(port):
     """Returns the coordinates as a numpy array of a port represented as an (x, y, angle) 3-tuple"""
     return np.array([port.x, port.y])
-
-
-def port_close(port1, port2):
-    """Checks if two ports are the same"""
-    return all(
-        map(lambda x: np.isclose(x[0], x[1]), zip(port1.as_tuple(), port2.as_tuple()))
-    )
 
 
 def euclidean_distance(p1, p2):
@@ -55,6 +49,12 @@ def reverse_angle(angle):
     return normalize_angle(angle + np.pi)
 
 
+def reverse_port(port):
+    return routing.Port(
+        port.x, port.y, reverse_angle(port.angle), geometry=port.geometry
+    )
+
+
 def angle_close(angle1, angle2):
     """Checks if two angles are close to one another"""
     return np.isclose(0, normalize_angle(angle1 - angle2))
@@ -71,7 +71,7 @@ def manhattan_angle(angle):
 
 
 def perp(v):
-    """Returns a vector perpendicular to the given vector"""
+    """Rotates given vector by 90 degrees counter-clockwise"""
     b = np.empty_like(v)
     b[0] = -v[1]
     b[1] = v[0]
@@ -109,13 +109,13 @@ def get_perpendicular_directions(port1, port2):
     dx = port2.x - port1.x
     dy = port2.y - port1.y
     if dx >= 0 and dy >= 0:
-        return [(0, 90), (90, 0)]
+        return [(0, np.pi / 2), (np.pi / 2, 0)]
     if dx < 0 and dy >= 0:
-        return [(180, 90), (90, 180)]
+        return [(np.pi, np.pi / 2), (np.pi / 2, np.pi)]
     if dx < 0 and dy < 0:
-        return [(180, -90), (-90, 180)]
+        return [(np.pi, -np.pi / 2), (-np.pi / 2, np.pi)]
     if dx >= 0 and dy < 0:
-        return [(0, -90), (-90, 0)]
+        return [(0, -np.pi / 2), (-np.pi / 2, 0)]
 
 
 def get_bounding_box(points, padding=0):
@@ -130,34 +130,46 @@ def get_bounding_box(points, padding=0):
     )
 
 
+def bbox_overlap(bbox1, bbox2):
+    return not (
+        bbox1[2] <= bbox2[0]
+        or bbox1[3] <= bbox2[1]
+        or bbox1[0] >= bbox2[2]
+        or bbox1[1] >= bbox2[3]
+    )
+
+
+def in_bbox(bbox, x, y):
+    return bbox_overlap(bbox, (x, y, x, y))
+
+
 def get_port_polygons(ports, l, w):
     """Returns polygon outlines for port markers used in the GUI"""
     polys = []
     for port in ports:
         poly = []
-        rad_angle = np.radians(port.angle)
         poly.append(
-            [port.x - w / 2 * np.sin(rad_angle), port.y + w / 2 * np.cos(rad_angle)]
+            [port.x - w / 2 * np.sin(port.angle), port.y - w / 2 * np.cos(port.angle)]
         )
         poly.append(
-            [port.x + w / 2 * np.sin(rad_angle), port.y - w / 2 * np.cos(rad_angle)]
+            [port.x + w / 2 * np.sin(port.angle), port.y + w / 2 * np.cos(port.angle)]
         )
         poly.append(
             [
-                port.x + w / 2 * np.sin(rad_angle) + l * np.cos(rad_angle),
-                port.y - w / 2 * np.cos(rad_angle) + l * np.sin(rad_angle),
+                port.x + w / 2 * np.sin(port.angle) + l * np.cos(port.angle),
+                port.y + w / 2 * np.cos(port.angle) - l * np.sin(port.angle),
             ]
         )
         poly.append(
             [
-                port.x + 1.5 * l * np.cos(rad_angle),
-                port.y + 1.5 * l * np.sin(rad_angle),
+                port.x + 1.5 * l * np.cos(port.angle),
+                port.y - 1.5 * l * np.sin(port.angle),
             ]
         )
         poly.append(
             [
-                port.x - w / 2 * np.sin(rad_angle) + l * np.cos(rad_angle),
-                port.y + w / 2 * np.cos(rad_angle) + l * np.sin(rad_angle),
+                port.x - w / 2 * np.sin(port.angle) + l * np.cos(port.angle),
+                port.y - w / 2 * np.cos(port.angle) - l * np.sin(port.angle),
             ]
         )
         polys.append(poly)

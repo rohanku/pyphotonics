@@ -9,13 +9,12 @@ from PIL import Image, ImageTk
 
 
 class PathingGUI(ttk.Frame):
-    def __init__(self, mainframe, inputs, outputs, current_gds=None, padding=200):
+    def __init__(
+        self, mainframe, inputs, outputs, gds_bbox, potential_ports, current_gds=None
+    ):
+        self.gds_bbox = gds_bbox
+        padding = 200
         # Find dimensions for routing frame in GDS and Tkinter canvas coordinates
-        self.gds_bbox = utils.get_bounding_box(
-            list(map(utils.get_port_coords, inputs))
-            + list(map(utils.get_port_coords, outputs)),
-            padding=500,
-        )
         aspect_ratio = (self.gds_bbox[3] - self.gds_bbox[1]) / (
             self.gds_bbox[2] - self.gds_bbox[0]
         )
@@ -54,9 +53,11 @@ class PathingGUI(ttk.Frame):
         self.linewidth = 1  # Display line width of routes
         self.selected_color = "#1eff00"  # Color of selected ports
         self.deselected_color = "#00c8ff"  # Color of deselected ports
+        self.potential_color = "#ff006f"  # Color of deselected ports
         self.N = len(inputs)  # Number of paths
         self.inputs = inputs
         self.outputs = outputs
+        self.potential_ports = potential_ports
         self.autoroute_paths = (
             None  # Determines whether program was quit or autoroute was run
         )
@@ -94,6 +95,7 @@ class PathingGUI(ttk.Frame):
         edit_menu.add_command(
             label="Previous Path", command=self.prev_path, accelerator="Q"
         )
+        edit_menu.add_command(label="Add Path", command=self.add_path, accelerator="Shift+A")
         edit_menu.add_command(label="Redraw", command=self.clear, accelerator="Cmd+D")
         edit_menu.add_command(
             label="Clear All", command=self.clear_all, accelerator="Cmd+L"
@@ -106,6 +108,7 @@ class PathingGUI(ttk.Frame):
             label="Redo", command=self.redo, accelerator="Cmd+Shift+Z"
         )
         self.master.bind_all("<KeyPress>", self.key_press)
+        self.master.bind_all("<Command-Shift-Z>", self.redo)
         self.master.bind_all("<Command-d>", self.clear)
         self.master.bind_all("<Command-D>", self.clear)
         self.master.bind_all("<Command-l>", self.clear_all)
@@ -162,20 +165,32 @@ class PathingGUI(ttk.Frame):
             )
         )
 
+        self.png_potential_ports = self.get_png_ports(potential_ports)
+        self.potential_port_markers = list(
+            map(
+                lambda x: self.canvas.create_polygon(*x, fill=self.potential_color),
+                utils.get_port_polygons(
+                    self.png_potential_ports, self.port_length, self.port_width
+                ),
+            )
+        )
+        if self.N != 0:
+            for marker in self.potential_port_markers:
+                self.canvas.itemconfigure(marker, state="hidden")
+
         # Color the selected ports appropriately
-        self.canvas.itemconfig(self.input_rects[0], fill=self.selected_color)
-        self.canvas.itemconfig(self.output_rects[0], fill=self.selected_color)
+        if self.N > 0:
+            self.canvas.itemconfig(self.input_rects[0], fill=self.selected_color)
+            self.canvas.itemconfig(self.output_rects[0], fill=self.selected_color)
 
         # Toolbar
         toolbar = Frame(self.master, relief=RAISED)
 
         # Path selection variables
-        self.selected_path_index = (
-            0  # Index of selected option for addressing various arrays
-        )
+        self.selected_path_index = 0 # Index of selected option for addressing various arrays
         self.current_paths = [
             [utils.get_port_coords(self.png_inputs[i])] for i in range(self.N)
-        ]  # List of current coordinates for each path, defaults to just those of the input port
+        ]  + [[]] # List of current coordinates for each path, defaults to just those of the input port
         self.undo_paths = []
         self.undo_terminated = []
         self.redo_paths = []
@@ -183,24 +198,26 @@ class PathingGUI(ttk.Frame):
         self.max_undos = 10
         self.path_lines = [
             None
-        ] * self.N  # Tkinter Canvas object IDs of lines representing current paths
+        ] * (self.N + 1)  # Tkinter Canvas object IDs of lines representing current paths
         self.path_terminated = [
             False
-        ] * self.N  # Whether the current path connects the input and output ports, determines if user should be in drawing mode
+        ] * (self.N + 1)  # Whether the current path connects the input and output ports, determines if user should be in drawing mode
         self.cursor_line = self.canvas.create_line(
-            *self.get_zoom_coords(self.current_paths[self.selected_path_index][-1]),
-            *self.get_zoom_coords(self.current_paths[self.selected_path_index][-1]),
+            0, 0, 0, 0,
             width=self.linewidth,
         )  # Line from last placed point to cursor
 
+        self.new_input = -1 # Index of potential input port of path being added
+
         # Path selection widgets
+        self.next_path_index = self.N + 1
         self.paths = [
             f"Path {i+1}" for i in range(self.N)
-        ]  # String options for Tkinter OptionMenu
+        ]  + ["Add Path"] # String options for Tkinter OptionMenu
         self.selected_path = StringVar(
             self.master, self.paths[self.selected_path_index]
         )  # String selected by OptionMenu
-        path_select = OptionMenu(
+        self.path_select = OptionMenu(
             toolbar, self.selected_path, *self.paths, command=self.path_selected
         )  # OptionMenu for selecting paths
         redraw_button = Button(toolbar, text="Redraw", command=self.clear)
@@ -209,7 +226,7 @@ class PathingGUI(ttk.Frame):
 
         # Toolbar UI layout
         toolbar.grid(row=0, column=0, sticky="nwe")
-        path_select.grid(row=0, column=0)
+        self.path_select.grid(row=0, column=0)
         redraw_button.grid(row=0, column=1)
         clear_all_button.grid(row=0, column=2)
         autoroute_button.grid(row=0, column=3)
@@ -261,14 +278,15 @@ class PathingGUI(ttk.Frame):
     def show_image(self, event=None):
         """Show image and other relevant geometry on the Canvas"""
         # Draw all paths, including the one being currently edited
-        if not self.path_terminated[self.selected_path_index]:
+        if not self.path_terminated[self.selected_path_index] and len(self.current_paths[self.selected_path_index]) > 0:
             self.canvas.itemconfigure(self.cursor_line, state="normal")
         else:
             self.canvas.itemconfigure(self.cursor_line, state="hidden")
-        cur_coords = self.canvas.coords(self.cursor_line)
-        coords = self.get_zoom_coords(self.current_paths[self.selected_path_index][-1])
-        self.canvas.coords(self.cursor_line, *coords, cur_coords[2], cur_coords[3])
-        for i in range(self.N):
+        if len(self.current_paths[self.selected_path_index]) > 0:
+            cur_coords = self.canvas.coords(self.cursor_line)
+            coords = self.get_zoom_coords(self.current_paths[self.selected_path_index][-1])
+            self.canvas.coords(self.cursor_line, *coords, cur_coords[2], cur_coords[3])
+        for i in range(self.N + 1):
             if len(self.current_paths[i]) > 1:
                 if self.path_lines[i]:
                     self.canvas.coords(
@@ -341,27 +359,44 @@ class PathingGUI(ttk.Frame):
                 imagetk  # Keep an extra reference to prevent garbage-collection
             )
 
+    def select_path(self, value):
+        self.selected_path.set(value)
+        self.path_selected()
+
     def path_selected(self, *args):
         """Handler for changing the selected path"""
         # Set the appropriate marker colors and update the current index
-        for i in range(self.N):
+        for i in range(self.N + 1):
             if self.paths[i] == self.selected_path.get():
                 self.selected_path_index = i
-                self.canvas.itemconfig(self.input_rects[i], fill=self.selected_color)
-                self.canvas.itemconfig(self.output_rects[i], fill=self.selected_color)
+                if i < self.N:
+                    self.canvas.itemconfig(self.input_rects[i], fill=self.selected_color)
+                    self.canvas.itemconfig(self.output_rects[i], fill=self.selected_color)
+                else:
+                    for marker in self.potential_port_markers:
+                        self.canvas.itemconfigure(marker, state="normal")
             else:
-                self.canvas.itemconfig(self.input_rects[i], fill=self.deselected_color)
-                self.canvas.itemconfig(self.output_rects[i], fill=self.deselected_color)
+                if i < self.N:
+                    self.canvas.itemconfig(self.input_rects[i], fill=self.deselected_color)
+                    self.canvas.itemconfig(self.output_rects[i], fill=self.deselected_color)
+                else:
+                    for marker in self.potential_port_markers:
+                        self.canvas.itemconfigure(marker, state="hidden")
         self.show_image()
 
     def motion(self, event):
         """Handler for mouse movement"""
         # If the path is not terminated, show the drawing cursor line
-        event_coords = np.array([event.x, event.y])
-        coords = self.get_zoom_coords(self.current_paths[self.selected_path_index][-1])
-        self.canvas.coords(
-            self.cursor_line, *coords, *self.get_canvas_coords(event_coords)
-        )
+        event_coords = self.get_canvas_coords(np.array([event.x, event.y]))
+        if len(self.current_paths[self.selected_path_index]) > 0:
+            coords = self.get_zoom_coords(self.current_paths[self.selected_path_index][-1])
+            self.canvas.coords(
+                self.cursor_line, *coords, *event_coords
+            )
+        else:
+            self.canvas.coords(
+                self.cursor_line, *event_coords, *event_coords
+            )
 
     def click(self, event):
         """Handler for mouse click"""
@@ -369,23 +404,93 @@ class PathingGUI(ttk.Frame):
         if not self.path_terminated[self.selected_path_index]:
             self.push_state()
             event_coords = np.array([event.x, event.y])
-            coords1 = self.get_canvas_coords(event_coords)
-            coords2 = self.get_zoom_coords(
-                self.current_paths[self.selected_path_index][-1]
-            )
+            coords = self.get_canvas_coords(event_coords)
+            buffer = np.array([5, 5])
+            coords1 = coords - buffer
+            coords2 = coords + buffer
             overlapping_objects = self.canvas.find_overlapping(*coords1, *coords2)
             # If the new endpoint causes the path to enter the output port, terminate the path
-            if self.output_rects[self.selected_path_index] in overlapping_objects:
-                self.path_terminated[self.selected_path_index] = True
-                self.current_paths[self.selected_path_index].append(
-                    utils.get_port_coords(self.png_outputs[self.selected_path_index])
-                )
+            if self.selected_path_index < self.N:
+                if self.output_rects[self.selected_path_index] in overlapping_objects:
+                    self.path_terminated[self.selected_path_index] = True
+                    self.current_paths[self.selected_path_index].append(
+                        utils.get_port_coords(self.png_outputs[self.selected_path_index])
+                    )
+                else:
+                    self.current_paths[self.selected_path_index].append(
+                        self.get_real_coords(event_coords)
+                    )
             else:
-                self.current_paths[self.selected_path_index].append(
-                    self.get_real_coords(event_coords)
-                )
+                found = False
+                for i in range(len(self.potential_port_markers)):
+                    marker = self.potential_port_markers[i]
+                    port_coords = utils.get_port_coords(self.png_potential_ports[i])
+                    if marker in overlapping_objects and all(map(lambda x: not np.allclose(port_coords, x), self.current_paths[self.selected_path_index])):
+                        if len(self.current_paths[self.selected_path_index]) != 0:
+                            self.path_terminated[self.selected_path_index] = True
+                            self.path_terminated.append(False)
+                            self.current_paths.append([])
+                            self.add_input_port(self.potential_ports[self.new_input])
+                            self.add_output_port(utils.reverse_port(self.potential_ports[i]))
+                            self.remove_potential_port(max(self.new_input, i))
+                            self.remove_potential_port(min(self.new_input, i))
+                            path_name = f"Path {self.next_path_index}"
+                            self.next_path_index += 1
+                            self.paths.insert(self.selected_path_index, path_name)
+                            self.path_select["menu"].delete(self.N, "end")
+                            self.path_select["menu"].add_command(label=path_name, command=lambda value=string: self.select_path(path_name))
+                            self.path_select["menu"].add_command(label="Add Path", command=lambda value=string: self.select_path("Add Path"))
+                            self.path_lines.append(None)
+                            self.new_input = -1
+                            self.N += 1
+                            self.current_paths[self.selected_path_index].append(
+                                port_coords
+                            )
+                            self.select_path(path_name)
+                        else:
+                            self.new_input = i
+                            self.canvas.itemconfig(self.potential_port_markers[i], fill=self.selected_color)
+                            self.current_paths[self.selected_path_index].append(
+                                port_coords
+                            )
+                        found = True
+                        break
+                if not found and len(self.current_paths[self.selected_path_index]) > 0:
+                    self.current_paths[self.selected_path_index].append(
+                        self.get_real_coords(event_coords)
+                    )
 
         self.show_image()
+
+    def add_input_port(self, port):
+        self.inputs.append(port)
+        self.png_inputs.extend(self.get_png_ports([port]))
+        self.input_rects.extend(list(
+            map(
+                lambda x: self.canvas.create_polygon(*x, fill=self.deselected_color),
+                utils.get_port_polygons(
+                    [self.png_inputs[-1]], self.port_length, self.port_width
+                ),
+            )
+        ))
+
+    def add_output_port(self, port):
+        self.outputs.append(port)
+        self.png_outputs.extend(self.get_png_ports([port]))
+        self.output_rects.extend(list(
+            map(
+                lambda x: self.canvas.create_polygon(*x, fill=self.deselected_color),
+                utils.get_port_polygons(
+                    [self.png_outputs[-1]], -self.port_length, self.port_width
+                ),
+            )
+        ))
+
+    def remove_potential_port(self, i):
+        del self.potential_ports[i]
+        del self.png_potential_ports[i]
+        self.canvas.delete(self.potential_port_markers[i])
+        del self.potential_port_markers[i]
 
     def push_state(self):
         if len(self.undo_paths) == self.max_undos:
@@ -396,14 +501,25 @@ class PathingGUI(ttk.Frame):
         self.redo_paths = []
         self.redo_terminated = []
 
+    def add_path(self, *args):
+        self.select_path("Add Path")
+
     def clear_by_index(self, index):
         """Clear the current path for the given index"""
-        self.current_paths[index] = [
-            utils.get_port_coords(self.png_inputs[self.selected_path_index])
-        ]
-        self.canvas.delete(self.path_lines[index])
-        self.path_lines[index] = None
-        self.path_terminated[index] = False
+        if index < self.N:
+            self.current_paths[index] = [
+                utils.get_port_coords(self.png_inputs[self.selected_path_index])
+            ]
+            self.canvas.delete(self.path_lines[index])
+            self.path_lines[index] = None
+            self.path_terminated[index] = False
+        else:
+            self.current_paths[index] = []
+            self.canvas.delete(self.path_lines[index])
+            self.path_lines[index] = None
+            self.path_terminated[index] = False
+            self.canvas.itemconfig(self.potential_port_markers[self.new_input], fill=self.potential_color)
+            self.new_input = -1
 
     def clear(self, *args):
         """Clear the currently selected path"""
@@ -414,7 +530,7 @@ class PathingGUI(ttk.Frame):
     def clear_all(self, *args):
         """Clear all paths"""
         self.push_state()
-        for i in range(self.N):
+        for i in range(self.N + 1):
             self.clear_by_index(i)
         self.show_image()
 
@@ -442,9 +558,7 @@ class PathingGUI(ttk.Frame):
                 raise TypeError("Invalid port specification")
             outputs.append(tuple(map(float, data)))
         for i in range(N):
-            if not utils.port_close(inputs[i], self.inputs[i]) or not utils.port_close(
-                outputs[i], self.outputs[i]
-            ):
+            if inputs[i] != self.inputs[i] or outputs[i] != self.outputs[i]:
                 messagebox.showerror("Ports do not correspond!")
                 f.close()
                 return
@@ -483,9 +597,9 @@ class PathingGUI(ttk.Frame):
         with open(self.current_file, "w") as f:
             f.write(f"{self.N}\n")
             for i in range(self.N):
-                f.write(f"{' '.join(map(str, self.inputs[i].as_tuple()))}\n")
+                f.write(f"{' '.join(map(str, self.inputs[i]))}\n")
             for i in range(self.N):
-                f.write(f"{' '.join(map(str, self.outputs[i].as_tuple()))}\n")
+                f.write(f"{' '.join(map(str, self.outputs[i]))}\n")
             for i in range(self.N):
                 f.write(
                     f"{'*' if self.path_terminated[i] else '-'} {' '.join(map(lambda x: f'{x[0]} {x[1]}', self.current_paths[i]))}\n"
@@ -507,18 +621,24 @@ class PathingGUI(ttk.Frame):
         self.save_paths()
 
     def key_press(self, event):
-        if event.char.lower() == "e":
+        if event.char == "e":
             self.next_path()
-        if event.char.lower() == "q":
+        if event.char == "q":
             self.prev_path()
+        if event.char == "A":
+            self.add_path()
 
     def next_path(self, *args):
-        self.selected_path.set(self.paths[(self.selected_path_index + 1) % self.N])
-        self.path_selected()
+        if self.N == 0:
+            return
+        if self.selected_path_index == self.N:
+            self.selected_path_index -= 1
+        self.select_path(self.paths[(self.selected_path_index + 1) % self.N])
 
     def prev_path(self, *args):
-        self.selected_path.set(self.paths[(self.selected_path_index - 1) % self.N])
-        self.path_selected()
+        if self.N == 0:
+            return
+        self.select_path(self.paths[(self.selected_path_index - 1) % self.N])
 
     def undo(self, *args):
         if len(self.undo_paths) == 0:
@@ -526,7 +646,8 @@ class PathingGUI(ttk.Frame):
             return
         self.redo_paths.append(list(map(lambda x: x[:], self.current_paths)))
         self.redo_terminated.append(self.path_terminated[:])
-        self.clear_all()
+        for i in range(self.N):
+            self.clear_by_index(i)
         self.current_paths = self.undo_paths.pop()
         self.path_terminated = self.undo_terminated.pop()
         self.show_image()
@@ -543,7 +664,7 @@ class PathingGUI(ttk.Frame):
         self.show_image()
 
     def autoroute(self, *args):
-        if not all(self.path_terminated):
+        if not all(self.path_terminated[:self.N]):
             messagebox.showerror("error", "Not all paths have been specified!")
             return
         self.autoroute_paths = list(

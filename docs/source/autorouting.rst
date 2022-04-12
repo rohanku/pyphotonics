@@ -14,13 +14,14 @@ Since the connecting waveguides are fairly simple in this case, we can use :meth
 
 .. code-block::
 
-  from pyphotonics.layout.routing import direct_route, write_paths_to_gds, Port
+  import numpy as np
+  from pyphotonics.layout.routing import direct_route, write_paths_to_gds, Port, WaveguideGeometry
 
   waveguide_1 = direct_route(
-      Port(-4190.777, -3689.900, -90), Port(-4032.002, -3664.303, 0), 0.8, [20, 50]
+      Port(-4190.777, -3689.900, -np.pi/2), Port(-4032.002, -3664.303, 0), WaveguideGeometry(0.8), [20, 50]
   )
   waveguide_2 = direct_route(
-      Port(-4444.777, -3709.900, -90), Port(-3919.955, -3659.303, 180), 0.8, [20, 50]
+      Port(-4444.777, -3709.900, -np.pi/2), Port(-3919.955, -3659.303, np.pi), WaveguideGeometry(0.8), [20, 50]
   )
   write_paths_to_gds([waveguide_1, waveguide_2], "/Users/rohan/Downloads/direct_route.gds", layer=1111)
 
@@ -36,12 +37,12 @@ We can then copy the generated waveguides to our device GDS to complete the layo
 
   :meth:`direct_route` does not account for waveguide crossings or obstacles and simply connects two ports in the most efficient way possible. Crossings can be avoided by offsetting ports slightly from one another, as demonstrated above. It may also not work for cases where the ports cannot be connected by a simple two segment path.
 
-If you would like to override the direction chosen by :meth:`direct_route`, you can use the ``x_first`` argument. In the example above, we may want to avoid the 180 degree bend in the upper waveguide, so we can specify ``x_first=True``:
+If you would like to override the direction chosen by :meth:`direct_route`, you can use the ``x_first`` argument. In the example above, we may want to avoid the 180 degree bend in the upper waveguide, so we can specify ``x_first=False``:
 
 .. code-block::
 
   waveguide_1 = direct_route(
-      Port(-4190.777, -3689.900, -90), Port(-4032.002, -3664.303, 0), 0.8, [20, 50], x_first=True
+      Port(-4190.777, -3689.900, -90), Port(-4032.002, -3664.303, 0), WaveguideGeometry(0.8), [20, 50], x_first=False
   )
 
 .. image:: _static/direct_route_xfirst.png
@@ -61,21 +62,22 @@ Once we find the coordinates of the relevant ports, we can write the following c
 
 .. code-block::
 
-  from pyphotonics.layout.routing import user_route, write_paths_to_gds, Port
+  import numpy as np
+  from pyphotonics.layout.routing import user_route, write_paths_to_gds, Port, WaveguideGeometry
 
   inputs = [Port(-11545.453, 2182.5 - 127 * i, 0) for i in range(7)]
   outputs = [
-      Port(-9435.453, 2055.5, 180),
+      Port(-9435.453, 2055.5, np.pi),
       Port(-10695.453, 2055.5, 0)
-  ] + [Port(-10463.728 + 254*i, 1826.777, 90) for i in range(5)]
+  ] + [Port(-10463.728 + 254*i, 1826.777, np.pi/2) for i in range(5)]
 
   waveguides = user_route(
-      inputs, outputs, 0.8, [62.75], 0.5, current_gds="/Users/rohan/Downloads/test.gds"
+      WaveguideGeometry(0.8), [50, 62.75], inputs=inputs, outputs=outputs, current_gds="/Users/rohan/Downloads/test.gds"
   )
 
   write_paths_to_gds(waveguides, "/Users/rohan/Downloads/user_route.gds", layer=1111)
 
-When we run this code snippet, Pyphotonics will take a screenshot of the layout around the provided ports and open a GUI for the user to specify waveguide routes.
+When we run this code snippet, Pyphotonics will automatically calculate an appropriate bounding box from the given inputs and ports, take a screenshot of the layout around the provided ports, and open a GUI for the user to specify waveguide routes.
 
 .. image:: _static/user_route_gui.png
 
@@ -94,3 +96,24 @@ Once we have finished specifying all routes, we can use ``Ctrl+R`` or :menuselec
 Pyphotonics will automatically straighten out waveguides and ensure the correct bend radii for each path. Although ports of any angle are supported, connecting paths are only created parallel or at a 45 degree angle to the x and y axes. The exported waveguides can then be copied into the final GDS to complete the layout.
 
 .. image:: _static/user_route_final.png
+
+Automatic Port Finding
+^^^^^^^^^^^^^^^^^^^^^^
+
+Pyphotonics also automatically finds potential ports during user routing, and allows users to add additional paths beyond the ones specified in their call to :meth:`user_route` from the GUI. If we want to exclusively create paths through the GUI to avoid having to manually find coordinates from the GDS, we can use the ``bbox`` parameter to tell :meth:`user_route` where to look for ports by specifying the bottom-left and upper-right corners of the area.
+
+In our example from above, we can make the following call to :meth:`user_route` to make use of this feature.
+
+.. code-block::
+
+   waveguides = user_route(
+       WaveguideGeometry(0.8), [50, 62.75], bbox=(-11804, 1302, -9167, 2464), current_gds="/Users/rohan/Downloads/test.gds"
+   )
+
+We then get the following screen, with potential ports highlighted in red.
+
+.. image:: _static/add_path.png
+
+We can then click on the desired port to begin a path, click to place points along the path, and then click on another port to complete the path. Once the path is completed, it will be added to the list of paths and can be redrawn between the same two ports as necessary. Additional paths can be added by selecting "Add Path" in the path selection dropdown, hitting ``Shift+A``, or selecting :menuselection:`Edit --> Add Path`. Once the desired paths are added, we can the steps outlined earlier to finish autorouting.
+
+.. image:: _static/add_path_2.png
