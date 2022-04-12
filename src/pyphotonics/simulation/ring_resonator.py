@@ -4,8 +4,22 @@ import os, string, random
 
 lumapi = lumerical.lumapi
 
+interactive = False
 
-def _setup_rr_mode(mode, wavelength):
+
+def ring_resonator_char():
+    print("Starting Lumerical session...")
+    # Create temporary simulation folder and wait for user input before running if interactive
+    tmp_dir = "/tmp/pyphotonics/ring_resonator_char"
+    os.makedirs(tmp_dir, exist_ok=True)
+    tag = "".join(random.choice(string.ascii_letters) for i in range(10))
+    fname = f"{tmp_dir}/rr_{tag}.lms"
+    print(f"Saving simulation file as {fname}...")
+    with lumapi.MODE() as mode:
+        run_sim(mode, fname)
+
+
+def run_sim(mode, fname):
     mode.addrect(
         name="add_wg",
         x=0,
@@ -48,43 +62,66 @@ def _setup_rr_mode(mode, wavelength):
         detailed_dispersion_calculation=1,
     )
 
+    mode.save(fname)
 
-def ring_resonator_char(
-    wavelength,
-    interactive=False,
-    sim_time=2000e-15,
-    io_buffer=3,
-    mesh_buffer=None,
-):
-    print("Starting Lumerical session...")
-    with lumapi.MODE() as mode:
-        print("Setting up simulation...")
-        _setup_rr_mode(mode, wavelength)
+    if interactive:
+        i = input("Press Enter to continue (or q to quit)...")
+        if i == "q":
+            quit()
 
-        # Create temporary simulation folder and wait for user input before running if interactive
-        tmp_dir = "/tmp/pyphotonics/ring_resonator_char"
-        os.makedirs(tmp_dir, exist_ok=True)
-        tag = "".join(random.choice(string.ascii_letters) for i in range(10))
-        fname = f"{tmp_dir}/rr_{tag}.lms"
-        print(f"Saving simulation file as {fname}...")
-        mode.save(fname)
+    mode.run()
 
-        if interactive:
-            i = input("Press Enter to continue (or q to quit)...")
-            if i == "q":
-                quit()
+    mode.findmodes()
+    mode.selectmode(1)
+    mode.save(fname)
+    mode.frequencysweep()
 
-        mode.run()
+    f = mode.getresult("frequencysweep", "f_D")
+    D = mode.getresult("frequencysweep", "D")
 
-        mode.findmodes()
-        mode.selectmode(1)
-        mode.frequencysweep()
+    mode.switchtolayout()
 
-        R = mode.getresult("frequencysweep")
-        T = mode.getresult("frequencysweep", "f")
+    # Determine coupling length
+    fde.x = 0
+    fde.wavelength = 1.55e-6
 
-        print("Simulation complete, returning results.")
+    mode.run()
+    mode.findmodes()
+    mode.frequencysweep()
+
+    f = mode.getresult("frequencysweep", "f")
+    neff = mode.getresult("frequencysweep", "neff")
+
+    mode.switchtolayout()
+    rr.radius = 3.1e-6
+
+    varfdtd = mode.addvarfdtd(
+        simulation_time=5000e-15,
+        x=0,
+        x_span=10e-6,
+        y=0,
+        y_span=10e-6,
+        z=0,
+        z_span=1e-6,
+        bandwidth="broadband",
+        x0=-3.143e-6,
+        y0=0,
+    )
+
+    mode_src = mode.addmodesource(
+        x=-4.5e-6,
+        y=3.6e-6,
+        y_span=3e-6,
+        wavelength_start=1.5e-6,
+        wavelength_stop=1.6e-6,
+    )
+    mode.save()
+    import pdb
+
+    pdb.set_trace()
+
+    print("Simulation complete, returning results.")
 
 
 if __name__ == "__main__":
-    ring_resonator_char(1.5e-6, interactive=False)
+    ring_resonator_char()
