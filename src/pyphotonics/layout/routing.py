@@ -3,8 +3,6 @@ import numpy as np
 from tkinter import *
 from pyphotonics.layout import utils, gui
 
-tk = Tk()
-
 
 class WaveguideGeometry:
     """
@@ -446,6 +444,8 @@ def get_rough_paths(
     paths : list[list[numpy tuple]]
         List of paths each consisting of a list of GDS coordinates.
     """
+
+    tk = Tk()
     if bbox is None:
         if len(inputs) == 0:
             raise ValueError(
