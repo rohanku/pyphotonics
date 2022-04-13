@@ -39,6 +39,7 @@ extensions = [
 
 # Autodoc settings
 autodoc_member_order = "bysource"
+autodoc_mock_imports = ["gdstk"]
 
 # Napoleon settings
 napoleon_google_docstring = False
