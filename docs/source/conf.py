@@ -39,7 +39,7 @@ extensions = [
 
 # Autodoc settings
 autodoc_member_order = "bysource"
-autodoc_mock_imports = ["gdstk", "numpy", "tkinter"]
+autodoc_mock_imports = ["gdstk", "numpy"]
 
 # Napoleon settings
 napoleon_google_docstring = False
