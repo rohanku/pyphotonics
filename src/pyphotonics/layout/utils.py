@@ -15,9 +15,9 @@ def euclidean_distance(p1, p2):
 
 def normalize_angle(angle):
     """Return angle between -180 and 180 that is equivalent to given angle"""
-    angle %= 2 * np.pi
+    angle %= 2.0 * np.pi
     if angle > np.pi:
-        angle -= 2 * np.pi
+        angle -= 2.0 * np.pi
     return angle
 
 

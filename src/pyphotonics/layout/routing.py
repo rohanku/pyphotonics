@@ -484,7 +484,7 @@ def get_rough_paths(
 
 
 def turn_port_route(
-    port, r_min, target_angle, reverse=False, four_point_threshold=np.pi / 18
+    port, r_min, target_angle, reverse=False, four_point_threshold=np.pi / 18.0
 ):
     """
     Returns a 3- or 4-point bend that turns the given port to the desired angle.
@@ -617,7 +617,7 @@ def direct_route(port1, port2, geometry, r_vals, x_first=None):
     # Add intermediate point for manhattan routing
     coords1, coords2 = (
         (points1[-1], points2[0])
-        if np.isclose(best_dir[0], np.pi / 2) or np.isclose(best_dir[0], np.pi / 2)
+        if np.isclose(best_dir[0], np.pi / 2.0) or np.isclose(best_dir[0], np.pi / 2.0)
         else (points2[0], points1[-1])
     )
     return WaveguidePath(
@@ -771,7 +771,7 @@ def write_paths_to_gds(paths, output_file, layer=0, datatype=0, layer2=1, dataty
                 rp.segment(curr_point)
                 cell.add(rp)
 
-                start_angle = horiz_angle - np.pi / 2
+                start_angle = horiz_angle - np.pi / 2.0
                 if angle < 0:
                     start_angle = utils.reverse_angle(start_angle)
                 rp = gdstk.FlexPath(
