@@ -597,9 +597,9 @@ class PathingGUI(ttk.Frame):
         with open(self.current_file, "w") as f:
             f.write(f"{self.N}\n")
             for i in range(self.N):
-                f.write(f"{' '.join(map(str, self.inputs[i]))}\n")
+                f.write(f"{str(self.inputs[i])}\n")
             for i in range(self.N):
-                f.write(f"{' '.join(map(str, self.outputs[i]))}\n")
+                f.write(f"{str(self.outputs[i])}\n")
             for i in range(self.N):
                 f.write(
                     f"{'*' if self.path_terminated[i] else '-'} {' '.join(map(lambda x: f'{x[0]} {x[1]}', self.current_paths[i]))}\n"

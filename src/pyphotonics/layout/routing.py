@@ -172,7 +172,6 @@ class WaveguidePath:
         return (
             self.bend_radii[index] * np.abs(np.tan(theta1 / 2))
             + self.bend_radii[index + 1] * np.abs(np.tan(theta2 / 2))
-            + 1e-6
         )
 
     def trim(self):
@@ -519,7 +518,7 @@ def turn_port_route(
         bend_angle < -np.pi + four_point_threshold
         or bend_angle > np.pi - four_point_threshold
     ):
-        l1 = np.abs(r_min * np.tan(bend_angle / 4)) + 1e-6
+        l1 = np.abs(r_min * np.tan(bend_angle / 4))
         inter1 = np.array([l1 * np.cos(port.angle), l1 * np.sin(port.angle)])
 
         l2 = 2 * l1
@@ -534,7 +533,7 @@ def turn_port_route(
 
         return [start, start + inter1, start + inter2, start + inter3]
 
-    l = np.abs(r_min * np.tan(bend_angle / 2)) + 1e-6
+    l = np.abs(r_min * np.tan(bend_angle / 2))
     inter1 = np.array([l * np.cos(port.angle), l * np.sin(port.angle)])
     inter2 = inter1 + np.array([l * np.cos(target_angle), l * np.sin(target_angle)])
 
