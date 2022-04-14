@@ -719,7 +719,7 @@ def user_route(
     return final_paths
 
 
-def write_paths_to_gds(paths, output_file, layer=0, datatype=0, layer2=1, datatype2=0):
+def write_paths_to_gds(paths, output_file, layer=0, datatype=0, layer2=1, datatype2=0, style='flexpath'):
     """
     Generates a set of paths with waveguides connecting inputs ports to output ports.
 
@@ -733,6 +733,8 @@ def write_paths_to_gds(paths, output_file, layer=0, datatype=0, layer2=1, dataty
         Desired GDS layer for waveguides.
     datatype : int
         Datatype label for GDS layer.
+    style: 'bend' or 'flexpath'
+        'bend' separates bends from straights, while 'flexpath' creates a single polygon.
 
     Returns
     -------
@@ -741,49 +743,89 @@ def write_paths_to_gds(paths, output_file, layer=0, datatype=0, layer2=1, dataty
     """
     lib = gdstk.Library()
     cell = lib.new_cell("AUTOROUTE")
-    for path in paths:
-        points = path.points
-        N = len(points)
-        prev_tangent_len = 0
-        curr_point = points[0]
-        for i in range(N - 1):
-            segment_len = path.get_length(i)
-            if i == N - 2:
-                rp = gdstk.FlexPath(curr_point, 0.8, layer=layer, datatype=datatype)
-                rp.segment(points[i + 1])
-                cell.add(rp)
-            else:
-                angle = utils.path_angle(points[i], points[i + 1], points[i + 2])
-                interior_angle = np.pi - np.abs(angle)
-                new_tangent_len = (
-                    0
-                    if np.isclose(interior_angle, 0.0)
-                    else path.bend_radii[i + 1] / np.tan(interior_angle / 2)
-                )
-                horiz_angle = utils.horizontal_angle(points[i + 1] - points[i])
+    if style=='bend':
+        for path in paths:
+            points = path.points
+            N = len(points)
+            prev_tangent_len = 0
+            curr_point = points[0]
+            for i in range(N - 1):
+                segment_len = path.get_length(i)
+                if i == N - 2:
+                    rp = gdstk.FlexPath(curr_point, 0.8, layer=layer, datatype=datatype)
+                    rp.segment(points[i + 1])
+                    cell.add(rp)
+                else:
+                    angle = utils.path_angle(points[i], points[i + 1], points[i + 2])
+                    interior_angle = np.pi - np.abs(angle)
+                    new_tangent_len = (
+                        0
+                        if np.isclose(interior_angle, 0.0)
+                        else path.bend_radii[i + 1] / np.tan(interior_angle / 2)
+                    )
+                    horiz_angle = utils.horizontal_angle(points[i + 1] - points[i])
 
-                rp = gdstk.FlexPath(
-                    curr_point, 0.8, tolerance=1e-3, layer=layer, datatype=datatype
-                )
-                curr_point += (
-                    segment_len - prev_tangent_len - new_tangent_len
-                ) * np.array([np.cos(horiz_angle), np.sin(horiz_angle)])
-                rp.segment(curr_point)
-                cell.add(rp)
+                    rp = gdstk.FlexPath(
+                        curr_point, 0.8, tolerance=1e-3, layer=layer, datatype=datatype
+                    )
+                    curr_point += (
+                        segment_len - prev_tangent_len - new_tangent_len
+                    ) * np.array([np.cos(horiz_angle), np.sin(horiz_angle)])
+                    rp.segment(curr_point)
+                    cell.add(rp)
 
-                start_angle = horiz_angle - np.pi / 2.0
-                if angle < 0:
-                    start_angle = utils.reverse_angle(start_angle)
-                rp = gdstk.FlexPath(
-                    curr_point, 0.8, tolerance=1e-3, layer=layer, datatype=datatype
-                )
-                rp.arc(path.bend_radii[i + 1], start_angle, start_angle + angle)
-                cell.add(rp)
-                curr_point = (
-                    points[i + 1]
-                    + (points[i + 2] - points[i + 1])
-                    / path.get_length(i + 1)
-                    * new_tangent_len
-                )
-                prev_tangent_len = new_tangent_len
+                    start_angle = horiz_angle - np.pi / 2.0
+                    if angle < 0:
+                        start_angle = utils.reverse_angle(start_angle)
+                    rp = gdstk.FlexPath(
+                        curr_point, 0.8, tolerance=1e-3, layer=layer, datatype=datatype
+                    )
+                    rp.arc(path.bend_radii[i + 1], start_angle, start_angle + angle)
+                    cell.add(rp)
+                    curr_point = (
+                        points[i + 1]
+                        + (points[i + 2] - points[i + 1])
+                        / path.get_length(i + 1)
+                        * new_tangent_len
+                    )
+                    prev_tangent_len = new_tangent_len
+    else:
+        for path in paths:
+            points = path.points
+            N = len(points)
+            prev_tangent_len = 0
+            curr_point = points[0]
+            rp = gdstk.FlexPath(points[0], path.wg_geometry.width, layer=layer, datatype=datatype)
+            for i in range(N - 1):
+                segment_len = path.get_length(i)
+                if i == N - 2:
+                    rp.segment(points[i + 1])
+                else:
+                    angle = utils.path_angle(points[i], points[i + 1], points[i + 2])
+                    interior_angle = np.pi - np.abs(angle)
+                    new_tangent_len = (
+                        0
+                        if np.isclose(interior_angle, 0.0)
+                        else path.bend_radii[i + 1] / np.tan(interior_angle / 2)
+                    )
+                    horiz_angle = utils.horizontal_angle(points[i + 1] - points[i])
+                    curr_point += (
+                        segment_len - prev_tangent_len - new_tangent_len
+                    ) * np.array([np.cos(horiz_angle), np.sin(horiz_angle)])
+
+                    rp.segment(curr_point)
+
+                    start_angle = horiz_angle - np.pi / 2.0
+                    if angle < 0:
+                        start_angle = utils.reverse_angle(start_angle)
+                    rp.arc(path.bend_radii[i + 1], start_angle, start_angle + angle)
+                    curr_point = (
+                        points[i + 1]
+                        + (points[i + 2] - points[i + 1])
+                        / path.get_length(i + 1)
+                        * new_tangent_len
+                    )
+                    prev_tangent_len = new_tangent_len
+            cell.add(rp)
+
     lib.write_gds(output_file)
