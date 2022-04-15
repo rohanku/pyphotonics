@@ -45,8 +45,8 @@ class Port:
         GDS y coordinate.
     angle : float
         Angle from positive x axis in radians.
-    width : float
-        Width of waveguide at port. 0 if unspecified.
+    geometry : WaveguideGeometry
+        Geometry of waveguide at port.
     """
 
     def __init__(self, x, y, angle, geometry=None):
@@ -75,12 +75,10 @@ class WaveguidePath:
     ----------
     points : list[numpy tuple]
         Coordinates of points defining the waveguide route.
-    width : float
-        Width of the waveguide in GDS units.
+    wg_geometry : WaveguideGeometry
+        Geometry of the waveguide.
     r_vals : list[float]
         Possible bend radii in GDS units.
-    wg_geometry : WaveguideGeometry
-        Geometry of waveguide.
     input_geometry: WaveguideGeometry
         Geometry of input port.
     output_geometry: WaveguideGeometry
@@ -88,18 +86,22 @@ class WaveguidePath:
 
     Attributes
     ----------
+    N : int
+        Number of points in path.
     points : list[numpy tuple]
         Coordinates of points defining the waveguide route.
-    width : float
-        Width of the waveguide in GDS units.
+    wg_geometry : WaveguideGeometry
+        Geometry of the waveguide.
     r_vals : list[float]
         Possible bend radii in GDS units.
     r_min : float
         Minimum bend radius in GDS units.
-    N : int
-        Number of points in path.
     bend_radii : list[float]
         Bend radius at each point, 0 at starting and ending vertices.
+    input_geometry: WaveguideGeometry
+        Geometry of input port.
+    output_geometry: WaveguideGeometry
+        Geometry of output port.
 
     Notes
     -----
@@ -327,7 +329,6 @@ def get_potential_ports(gds, geometry, bbox=None):
                     if first_ccw and second_ccw:
                         v = -v
 
-                    
                     port = Port(
                         midpoint[0],
                         midpoint[1],
@@ -335,10 +336,8 @@ def get_potential_ports(gds, geometry, bbox=None):
                         geometry=slab_geometry,
                     )
                     if not port in potential_ports:
-                        potential_ports.append(
-                            port
-                        )
-    if geometry.kind == 'ridge':
+                        potential_ports.append(port)
+    if geometry.kind == "ridge":
         for cell in lib.cells:
             for poly in cell.get_polygons():
                 if bbox is not None and not utils.bbox_overlap(
@@ -356,13 +355,13 @@ def get_potential_ports(gds, geometry, bbox=None):
                     edge_len = utils.euclidean_distance(
                         poly.points[i], poly.points[(i + 1) % N]
                     )
-                    if np.isclose(
-                        edge_len, geometry.ridge_width
-                    ):
+                    if np.isclose(edge_len, geometry.ridge_width):
                         v = utils.perp(poly.points[(i + 1) % N] - poly.points[i])
                         first_ccw = (
                             utils.path_angle(
-                                poly.points[i - 1], poly.points[i], poly.points[(i + 1) % N]
+                                poly.points[i - 1],
+                                poly.points[i],
+                                poly.points[(i + 1) % N],
                             )
                             >= 0
                         )
@@ -380,7 +379,6 @@ def get_potential_ports(gds, geometry, bbox=None):
                         if first_ccw and second_ccw:
                             v = -v
 
-                        
                         port = Port(
                             midpoint[0],
                             midpoint[1],
@@ -397,7 +395,7 @@ def get_potential_ports(gds, geometry, bbox=None):
                         )
                         if ind1 == -1:
                             potential_ports.append(port)
-                        elif potential_ports[ind1].geometry.kind == 'slab':
+                        elif potential_ports[ind1].geometry.kind == "slab":
                             potential_ports[ind1].geometry = geometry
 
     i = 0
@@ -630,7 +628,13 @@ def direct_route(port1, port2, geometry, r_vals, x_first=None):
 
 
 def user_route(
-    geometry, r_vals, inputs=[], outputs=[], bbox=None, route_file=None, current_gds=None
+    geometry,
+    r_vals,
+    inputs=[],
+    outputs=[],
+    bbox=None,
+    route_file=None,
+    current_gds=None,
 ):
     """
     Returns a user specified route that has been modified to fit the given specifications. Opens a routing GUI if necessary to allow for user input.
@@ -719,7 +723,9 @@ def user_route(
     return final_paths
 
 
-def write_paths_to_gds(paths, output_file, layer=0, datatype=0, layer2=1, datatype2=0, style='segmented'):
+def write_paths_to_gds(
+    paths, output_file, layer=0, datatype=0, layer2=1, datatype2=0, style="segmented"
+):
     """
     Generates a set of paths with waveguides connecting inputs ports to output ports.
 
@@ -743,7 +749,7 @@ def write_paths_to_gds(paths, output_file, layer=0, datatype=0, layer2=1, dataty
     """
     lib = gdstk.Library()
     cell = lib.new_cell("AUTOROUTE")
-    if style=='segmented':
+    if style == "segmented":
         for path in paths:
             points = path.points
             N = len(points)
@@ -752,7 +758,12 @@ def write_paths_to_gds(paths, output_file, layer=0, datatype=0, layer2=1, dataty
             for i in range(N - 1):
                 segment_len = path.get_length(i)
                 if i == N - 2:
-                    rp = gdstk.RobustPath(curr_point, path.wg_geometry.width, layer=layer, datatype=datatype)
+                    rp = gdstk.RobustPath(
+                        curr_point,
+                        path.wg_geometry.width,
+                        layer=layer,
+                        datatype=datatype,
+                    )
                     rp.segment(points[i + 1])
                     cell.add(rp)
                 else:
@@ -766,7 +777,10 @@ def write_paths_to_gds(paths, output_file, layer=0, datatype=0, layer2=1, dataty
                     horiz_angle = utils.horizontal_angle(points[i + 1] - points[i])
 
                     rp = gdstk.RobustPath(
-                        curr_point, path.wg_geometry.width, layer=layer, datatype=datatype
+                        curr_point,
+                        path.wg_geometry.width,
+                        layer=layer,
+                        datatype=datatype,
                     )
                     curr_point += (
                         segment_len - prev_tangent_len - new_tangent_len
@@ -778,9 +792,12 @@ def write_paths_to_gds(paths, output_file, layer=0, datatype=0, layer2=1, dataty
                     if angle < 0:
                         start_angle = utils.reverse_angle(start_angle)
                     rp = gdstk.RobustPath(
-                        curr_point, path.wg_geometry.width, layer=layer, datatype=datatype
+                        curr_point,
+                        path.wg_geometry.width,
+                        layer=layer,
+                        datatype=datatype,
                     )
-                    rp.arc(path.bend_radii[i + 1], start_angle, start_angle+angle)
+                    rp.arc(path.bend_radii[i + 1], start_angle, start_angle + angle)
                     cell.add(rp)
                     curr_point = (
                         points[i + 1]
@@ -795,7 +812,9 @@ def write_paths_to_gds(paths, output_file, layer=0, datatype=0, layer2=1, dataty
             N = len(points)
             prev_tangent_len = 0
             curr_point = points[0]
-            rp = gdstk.RobustPath(points[0], path.wg_geometry.width, layer=layer, datatype=datatype)
+            rp = gdstk.RobustPath(
+                points[0], path.wg_geometry.width, layer=layer, datatype=datatype
+            )
             for i in range(N - 1):
                 segment_len = path.get_length(i)
                 if i == N - 2:
