@@ -68,22 +68,23 @@ class PathingGUI(ttk.Frame):
         # Basic file operations (e.g. save, open, close)
         self.current_file = None
         file_menu = Menu(menu_bar, tearoff=0)
-        file_menu.add_command(label="Open", command=self.open, accelerator="Cmd+O")
+        # file_menu.add_command(label="Open", command=self.open, accelerator="Cmd+O")
         file_menu.add_command(
             label="Close", command=self.master.quit, accelerator="Cmd+W"
         )
-        file_menu.add_command(label="Save", command=self.save, accelerator="Cmd+S")
-        file_menu.add_command(
-            label="Save As", command=self.save_as, accelerator="Cmd+Shift+S"
-        )
-        self.master.bind_all("<Command-o>", self.open)
-        self.master.bind_all("<Command-O>", self.open)
+        # file_menu.add_command(label="Save", command=self.save, accelerator="Cmd+S")
+        # file_menu.add_command(
+        #     label="Save As", command=self.save_as, accelerator="Cmd+Shift+S"
+        # )
+        # self.master.bind_all("<Command-o>", self.open)
+        # self.master.bind_all("<Command-O>", self.open)
         self.master.bind_all("<Command-w>", lambda x: self.master.quit())
         self.master.bind_all("<Command-W>", lambda x: self.master.quit())
-        self.master.bind_all("<Command-s>", self.save)
-        self.master.bind_all("<Command-S>", self.save)
-        self.master.bind_all("<Command-Shift-s>", self.save_as)
-        self.master.bind_all("<Command-Shift-S>", self.save_as)
+        # TODO: Fix saving and restoring paths
+        # self.master.bind_all("<Command-s>", self.save)
+        # self.master.bind_all("<Command-S>", self.save)
+        # self.master.bind_all("<Command-Shift-s>", self.save_as)
+        # self.master.bind_all("<Command-Shift-S>", self.save_as)
         menu_bar.add_cascade(label="File", menu=file_menu)
 
         # Basic edit operations (e.g. select path, undo, redo)
@@ -539,10 +540,6 @@ class PathingGUI(ttk.Frame):
         if len(lines) < 1:
             raise TypeError("No data found")
         N = int(lines.pop(0))
-        if N != self.N:
-            messagebox.showerror("error", "Number of ports does not match!")
-            f.close()
-            return
         if len(lines) != 3 * N:
             raise TypeError("Incorrect number of lines")
         inputs = []
@@ -550,7 +547,6 @@ class PathingGUI(ttk.Frame):
             data = lines.pop(0).strip().split()
             if len(data) != 3:
                 raise TypeError("Invalid port specification")
-            inputs.append(tuple(map(float, data)))
         outputs = []
         for i in range(N):
             data = lines.pop(0).strip().split()
@@ -595,7 +591,7 @@ class PathingGUI(ttk.Frame):
 
     def save_paths(self):
         with open(self.current_file, "w") as f:
-            f.write(f"{self.N}\n")
+            f.write(f"{self.N} {self.gds_bbox}\n")
             for i in range(self.N):
                 f.write(f"{str(self.inputs[i])}\n")
             for i in range(self.N):
@@ -604,6 +600,8 @@ class PathingGUI(ttk.Frame):
                 f.write(
                     f"{'*' if self.path_terminated[i] else '-'} {' '.join(map(lambda x: f'{x[0]} {x[1]}', self.current_paths[i]))}\n"
                 )
+            for i in range(self.N):
+                f.write(f"{str(self.potential_ports[i])}\n")
 
     def save(self, *args):
         if self.current_file is None:

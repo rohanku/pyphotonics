@@ -172,6 +172,7 @@ class WaveguidePath:
         return (
             self.bend_radii[index] * np.abs(np.tan(theta1 / 2))
             + self.bend_radii[index + 1] * np.abs(np.tan(theta2 / 2))
+            + 1e-6
         )
 
     def trim(self):
@@ -518,7 +519,7 @@ def turn_port_route(
         bend_angle < -np.pi + four_point_threshold
         or bend_angle > np.pi - four_point_threshold
     ):
-        l1 = np.abs(r_min * np.tan(bend_angle / 4))
+        l1 = np.abs(r_min * np.tan(bend_angle / 4)) + 1e-6
         inter1 = np.array([l1 * np.cos(port.angle), l1 * np.sin(port.angle)])
 
         l2 = 2 * l1
@@ -533,7 +534,7 @@ def turn_port_route(
 
         return [start, start + inter1, start + inter2, start + inter3]
 
-    l = np.abs(r_min * np.tan(bend_angle / 2))
+    l = np.abs(r_min * np.tan(bend_angle / 2)) + 1e-6
     inter1 = np.array([l * np.cos(port.angle), l * np.sin(port.angle)])
     inter2 = inter1 + np.array([l * np.cos(target_angle), l * np.sin(target_angle)])
 
@@ -718,7 +719,7 @@ def user_route(
     return final_paths
 
 
-def write_paths_to_gds(paths, output_file, layer=0, datatype=0, layer2=1, datatype2=0, style='flexpath'):
+def write_paths_to_gds(paths, output_file, layer=0, datatype=0, layer2=1, datatype2=0, style='segmented'):
     """
     Generates a set of paths with waveguides connecting inputs ports to output ports.
 
@@ -732,8 +733,8 @@ def write_paths_to_gds(paths, output_file, layer=0, datatype=0, layer2=1, dataty
         Desired GDS layer for waveguides.
     datatype : int
         Datatype label for GDS layer.
-    style: 'bend' or 'flexpath'
-        'bend' separates bends from straights, while 'flexpath' creates a single polygon.
+    style: 'segmented' or 'continuous'
+        'segmented' separates bends from straights, while 'continuous' creates a single polygon that is split up arbitrarily if the vertex count grows too large.
 
     Returns
     -------
@@ -742,7 +743,7 @@ def write_paths_to_gds(paths, output_file, layer=0, datatype=0, layer2=1, dataty
     """
     lib = gdstk.Library()
     cell = lib.new_cell("AUTOROUTE")
-    if style=='bend':
+    if style=='segmented':
         for path in paths:
             points = path.points
             N = len(points)
@@ -751,7 +752,7 @@ def write_paths_to_gds(paths, output_file, layer=0, datatype=0, layer2=1, dataty
             for i in range(N - 1):
                 segment_len = path.get_length(i)
                 if i == N - 2:
-                    rp = gdstk.FlexPath(curr_point, 0.8, layer=layer, datatype=datatype)
+                    rp = gdstk.RobustPath(curr_point, path.wg_geometry.width, layer=layer, datatype=datatype)
                     rp.segment(points[i + 1])
                     cell.add(rp)
                 else:
@@ -764,8 +765,8 @@ def write_paths_to_gds(paths, output_file, layer=0, datatype=0, layer2=1, dataty
                     )
                     horiz_angle = utils.horizontal_angle(points[i + 1] - points[i])
 
-                    rp = gdstk.FlexPath(
-                        curr_point, 0.8, tolerance=1e-3, layer=layer, datatype=datatype
+                    rp = gdstk.RobustPath(
+                        curr_point, path.wg_geometry.width, layer=layer, datatype=datatype
                     )
                     curr_point += (
                         segment_len - prev_tangent_len - new_tangent_len
@@ -773,13 +774,13 @@ def write_paths_to_gds(paths, output_file, layer=0, datatype=0, layer2=1, dataty
                     rp.segment(curr_point)
                     cell.add(rp)
 
-                    start_angle = horiz_angle - np.pi / 2.0
+                    start_angle = horiz_angle - np.pi / 2
                     if angle < 0:
                         start_angle = utils.reverse_angle(start_angle)
-                    rp = gdstk.FlexPath(
-                        curr_point, 0.8, tolerance=1e-3, layer=layer, datatype=datatype
+                    rp = gdstk.RobustPath(
+                        curr_point, path.wg_geometry.width, layer=layer, datatype=datatype
                     )
-                    rp.arc(path.bend_radii[i + 1], start_angle, start_angle + angle)
+                    rp.arc(path.bend_radii[i + 1], start_angle, start_angle+angle)
                     cell.add(rp)
                     curr_point = (
                         points[i + 1]
@@ -794,7 +795,7 @@ def write_paths_to_gds(paths, output_file, layer=0, datatype=0, layer2=1, dataty
             N = len(points)
             prev_tangent_len = 0
             curr_point = points[0]
-            rp = gdstk.FlexPath(points[0], path.wg_geometry.width, layer=layer, datatype=datatype)
+            rp = gdstk.RobustPath(points[0], path.wg_geometry.width, layer=layer, datatype=datatype)
             for i in range(N - 1):
                 segment_len = path.get_length(i)
                 if i == N - 2:
