@@ -292,7 +292,9 @@ def get_potential_ports(gds, geometry, bbox=None):
     slab_geometry = WaveguideGeometry(geometry.width)
     for cell in lib.cells:
         for poly in cell.get_polygons():
-            if bbox is not None and not utils.bbox_overlap(bbox, tuple(t for tup in poly.bounding_box() for t in tup)):
+            if bbox is not None and not utils.bbox_overlap(
+                bbox, tuple(t for tup in poly.bounding_box() for t in tup)
+            ):
                 continue
 
             N = len(poly.points)
@@ -338,7 +340,9 @@ def get_potential_ports(gds, geometry, bbox=None):
     if geometry.kind == "ridge":
         for cell in lib.cells:
             for poly in cell.get_polygons():
-                if bbox is not None and not utils.bbox_overlap(bbox, tuple(t for tup in poly.bounding_box() for t in tup)):
+                if bbox is not None and not utils.bbox_overlap(
+                    bbox, tuple(t for tup in poly.bounding_box() for t in tup)
+                ):
                     continue
 
                 N = len(poly.points)
@@ -399,7 +403,9 @@ def get_potential_ports(gds, geometry, bbox=None):
         port = potential_ports[i]
         flipped_port = utils.reverse_port(port)
         if flipped_port in potential_ports:
-            potential_ports = [p for p in potential_ports if p not in [port, flipped_port]]
+            potential_ports = [
+                p for p in potential_ports if p not in [port, flipped_port]
+            ]
         else:
             i += 1
 

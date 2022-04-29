@@ -146,7 +146,9 @@ def get_port_polygons(ports, l, w):
     """Returns polygon outlines for port markers used in the GUI"""
     polys = []
     for port in ports:
-        poly = [[port.x - w / 2 * np.sin(port.angle), port.y - w / 2 * np.cos(port.angle)]]
+        poly = [
+            [port.x - w / 2 * np.sin(port.angle), port.y - w / 2 * np.cos(port.angle)]
+        ]
 
         poly.append(
             [port.x + w / 2 * np.sin(port.angle), port.y + w / 2 * np.cos(port.angle)]

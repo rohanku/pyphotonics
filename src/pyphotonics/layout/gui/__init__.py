@@ -149,8 +149,8 @@ class PathingGUI(ttk.Frame):
 
         # Bind events to the Canvas
         self.canvas.bind("<Configure>", self.show_image)
-        self.canvas.bind("<ButtonPress-3>", self.move_from) # Panning
-        self.canvas.bind("<B3-Motion>", self.move_to) # Panning
+        self.canvas.bind("<ButtonPress-3>", self.move_from)  # Panning
+        self.canvas.bind("<B3-Motion>", self.move_to)  # Panning
         self.canvas.bind("<MouseWheel>", self.wheel)  # Scroll for Windows and MacOS
         self.canvas.bind("<Button-5>", self.wheel)  # Scroll down for Linux
         self.canvas.bind("<Button-4>", self.wheel)  # Scroll up for Linux
@@ -202,9 +202,7 @@ class PathingGUI(ttk.Frame):
         toolbar = Frame(self.master, relief=RAISED)
 
         # Path selection variables
-        self.selected_path_index = (
-            0  # Index of selected option for addressing various arrays, equal to self.N if in Add Path mode
-        )
+        self.selected_path_index = 0  # Index of selected option for addressing various arrays, equal to self.N if in Add Path mode
         self.current_paths = [
             [utils.get_port_coords(self.png_inputs[i])] for i in range(self.N)
         ] + [
@@ -212,10 +210,14 @@ class PathingGUI(ttk.Frame):
         ]  # List of current coordinates for each path, defaults to just those of the input port. Starts as an empty list for index self.N, corresponding to Add Path mode
 
         self.max_undos = 10
-        self.undo_paths = [] # Stored paths for undoing
-        self.undo_terminated = [] # Stored information about whether paths were terminated
-        self.redo_paths = [] # Stored paths for redoing
-        self.redo_terminated = [] # Stored information about whether paths were terminated
+        self.undo_paths = []  # Stored paths for undoing
+        self.undo_terminated = (
+            []
+        )  # Stored information about whether paths were terminated
+        self.redo_paths = []  # Stored paths for redoing
+        self.redo_terminated = (
+            []
+        )  # Stored information about whether paths were terminated
         self.path_lines = [None] * (
             self.N + 1
         )  # Tkinter Canvas object IDs of lines representing current paths
@@ -406,12 +408,8 @@ class PathingGUI(ttk.Frame):
                     for marker in self.potential_port_markers:
                         self.canvas.itemconfigure(marker, state="normal")
             elif i < self.N:
-                self.canvas.itemconfig(
-                    self.input_rects[i], fill=self.deselected_color
-                )
-                self.canvas.itemconfig(
-                    self.output_rects[i], fill=self.deselected_color
-                )
+                self.canvas.itemconfig(self.input_rects[i], fill=self.deselected_color)
+                self.canvas.itemconfig(self.output_rects[i], fill=self.deselected_color)
             else:
                 for marker in self.potential_port_markers:
                     self.canvas.itemconfigure(marker, state="hidden")
@@ -564,9 +562,7 @@ class PathingGUI(ttk.Frame):
         self.potential_port_markers.extend(
             list(
                 map(
-                    lambda x: self.canvas.create_polygon(
-                        *x, fill=self.potential_color
-                    ),
+                    lambda x: self.canvas.create_polygon(*x, fill=self.potential_color),
                     utils.get_port_polygons(
                         [self.potential_ports[-1]], -self.port_length, self.port_width
                     ),
@@ -596,7 +592,7 @@ class PathingGUI(ttk.Frame):
         if self.selected_path_index == self.N:
             return
 
-        self.select_path(self.paths(max(0, self.selected_path-1)))
+        self.select_path(self.paths(max(0, self.selected_path - 1)))
 
     def clear_by_index(self, index):
         """Clear the current path for the given index"""
