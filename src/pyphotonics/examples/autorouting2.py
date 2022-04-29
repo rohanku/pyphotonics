@@ -7,9 +7,9 @@ from pyphotonics.layout.routing import (
 )
 from pyphotonics.config import PATH
 
-inputs = [Port(-11545.453, 2182.5 - 127 * i, 0) for i in range(7)]
+inputs = [Port(-11545.453, 2182.5 - 127 * i, 0) for i in range(3)]
 outputs = [Port(-9435.453, 2055.5, np.pi), Port(-10695.453, 2055.5, 0)] + [
-    Port(-10463.728 + 254 * i, 1826.777, np.pi / 2) for i in range(5)
+    Port(-10463.728 + 254 * i, 1826.777, np.pi / 2) for i in range(1)
 ]
 
 waveguides = user_route(
