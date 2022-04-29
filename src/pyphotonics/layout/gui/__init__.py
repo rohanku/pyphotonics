@@ -31,7 +31,7 @@ class PathingGUI(ttk.Frame):
         self.image = None
         if current_gds:
             # Retrieve screenshot of the provided GDS file
-            tag = "".join(random.choice(string.ascii_letters) for i in range(10))
+            tag = "".join(random.choice(string.ascii_letters) for _ in range(10))
             os.makedirs("/tmp/pyphotonics/autoroute", exist_ok=True)
             path = f"/tmp/pyphotonics/autoroute/{tag}.png"
 
@@ -276,9 +276,7 @@ class PathingGUI(ttk.Frame):
         bbox = self.canvas.bbox(self.container)  # Get image area
 
         # Allow zoom only if mouse is within the image
-        if bbox[0] < x < bbox[2] and bbox[1] < y < bbox[3]:
-            pass
-        else:
+        if not bbox[0] < x < bbox[2] or not bbox[1] < y < bbox[3]:
             return
 
         scale = 1.0
@@ -407,17 +405,16 @@ class PathingGUI(ttk.Frame):
                 else:
                     for marker in self.potential_port_markers:
                         self.canvas.itemconfigure(marker, state="normal")
+            elif i < self.N:
+                self.canvas.itemconfig(
+                    self.input_rects[i], fill=self.deselected_color
+                )
+                self.canvas.itemconfig(
+                    self.output_rects[i], fill=self.deselected_color
+                )
             else:
-                if i < self.N:
-                    self.canvas.itemconfig(
-                        self.input_rects[i], fill=self.deselected_color
-                    )
-                    self.canvas.itemconfig(
-                        self.output_rects[i], fill=self.deselected_color
-                    )
-                else:
-                    for marker in self.potential_port_markers:
-                        self.canvas.itemconfigure(marker, state="hidden")
+                for marker in self.potential_port_markers:
+                    self.canvas.itemconfigure(marker, state="hidden")
         self.show_image()
 
     def motion(self, event):

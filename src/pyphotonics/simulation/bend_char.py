@@ -225,7 +225,7 @@ def soi_bend_char_varfdtd(
         # Create temporary simulation folder and wait for user input before running if interactive
         tmp_dir = "/tmp/pyphotonics/bend_char"
         os.makedirs(tmp_dir, exist_ok=True)
-        tag = "".join(random.choice(string.ascii_letters) for i in range(10))
+        tag = "".join(random.choice(string.ascii_letters) for _ in range(10))
         fname = f"{tmp_dir}/width_{int(width*1e9)}nm_radius_{int(radius*1e9)}nm_angle_{int(angle)}_{tag}.lms"
         print(f"Saving simulation file as {fname}...")
         mode.save(fname)
