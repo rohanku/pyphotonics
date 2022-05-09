@@ -210,19 +210,21 @@ class WaveguidePath:
             raise ValueError("Segment index must be between in [0, len(path)-1)")
         path = self.points
         theta1 = (
-            self.input_taper_len
+            0
             if index == 0
             else utils.path_angle(path[index - 1], path[index], path[index + 1])
         )
         theta2 = (
-            self.output_taper_len
+            0
             if index == self.N - 2
             else utils.path_angle(path[index], path[index + 1], path[index + 2])
         )
 
         return (
-            self.bend_radii[index] * np.abs(np.tan(theta1 / 2))
+            (self.input_taper_len if index == 0 else 0)
+            + self.bend_radii[index] * np.abs(np.tan(theta1 / 2))
             + self.bend_radii[index + 1] * np.abs(np.tan(theta2 / 2))
+            + (self.output_taper_len if index == self.N - 2 else 0)
             + 1e-6
         )
 

@@ -130,9 +130,13 @@ class PathingGUI(ttk.Frame):
         edit_menu.add_command(
             label="Add Path", command=self.add_path, accelerator="Shift+A"
         )
+        edit_menu.add_command(label="Delete", command=self.delete, accelerator="Shift+D")
+        edit_menu.add_command(
+            label="Delete All", command=self.delete_all, accelerator="Shift+C"
+        )
         edit_menu.add_command(label="Redraw", command=self.clear, accelerator="Cmd+D")
         edit_menu.add_command(
-            label="Clear All", command=self.clear_all, accelerator="Cmd+L"
+            label="Redraw All", command=self.clear_all, accelerator="Cmd+L"
         )
         edit_menu.add_command(
             label="Autoroute", command=self.autoroute, accelerator="Cmd+R"
@@ -265,16 +269,20 @@ class PathingGUI(ttk.Frame):
         self.path_select = OptionMenu(
             toolbar, self.selected_path, *self.paths, command=self.path_selected
         )  # OptionMenu for selecting paths
+        delete_button = Button(toolbar, text="Delete", command=self.delete)
+        delete_all_button = Button(toolbar, text="Delete All", command=self.delete_all)
         redraw_button = Button(toolbar, text="Redraw", command=self.clear)
-        clear_all_button = Button(toolbar, text="Clear All", command=self.clear_all)
+        redraw_all_button = Button(toolbar, text="Redraw All", command=self.clear_all)
         autoroute_button = Button(toolbar, text="Autoroute", command=self.autoroute)
 
         # Toolbar UI layout
         toolbar.grid(row=0, column=0, sticky="nwe")
         self.path_select.grid(row=0, column=0)
-        redraw_button.grid(row=0, column=1)
-        clear_all_button.grid(row=0, column=2)
-        autoroute_button.grid(row=0, column=3)
+        delete_button.grid(row=0, column=1)
+        delete_all_button.grid(row=0, column=2)
+        redraw_button.grid(row=0, column=3)
+        redraw_all_button.grid(row=0, column=4)
+        autoroute_button.grid(row=0, column=5)
 
         # Bind mouse movement and clicking for route placement
         self.canvas.bind("<Motion>", self.motion)
@@ -580,7 +588,7 @@ class PathingGUI(ttk.Frame):
                 map(
                     lambda x: self.canvas.create_polygon(x, fill=self.potential_color),
                     utils.get_port_polygons(
-                        [self.potential_ports[-1]], -self.port_length, self.port_width
+                        [self.png_potential_ports[-1]], -self.port_length, self.port_width
                     ),
                 )
             )
@@ -604,11 +612,35 @@ class PathingGUI(ttk.Frame):
     def add_path(self, *args):
         self.select_path("Add Path")
 
-    def delete_path(self, *args):
-        if self.selected_path_index == self.N:
+    def delete_by_index(self, index):
+        self.clear_by_index(index)
+        if index == self.N:
             return
+        del self.path_lines[index]
+        del self.path_terminated[index]
+        del self.current_paths[index]
+        del self.paths[index]
+        self.path_select["menu"].delete(index)
+        self.add_potential_port(self.inputs[index])
+        self.add_potential_port(utils.reverse_port(self.outputs[index]))
+        self.remove_input_port(index)
+        self.remove_output_port(index)
+        self.N -= 1
 
-        self.select_path(self.paths(max(0, self.selected_path - 1)))
+    def delete(self, *args):
+        """Clear the currently selected path"""
+        self.push_state()
+        self.delete_by_index(self.selected_path_index)
+        self.select_path(self.paths[self.selected_path_index])
+        self.show_image()
+
+    def delete_all(self, *args):
+        """Clear all paths"""
+        self.push_state()
+        for _ in range(self.N + 1):
+            self.delete_by_index(0)
+        self.add_path()
+        self.show_image()
 
     def clear_by_index(self, index):
         """Clear the current path for the given index"""
@@ -732,6 +764,10 @@ class PathingGUI(ttk.Frame):
             self.prev_path()
         if event.char == "A":
             self.add_path()
+        if event.char == "D":
+            self.delete()
+        if event.char == "C":
+            self.delete_all()
 
     def next_path(self, *args):
         if self.N == 0:
