@@ -118,6 +118,10 @@ class WaveguidePath:
         Geometry of input port.
     output_geometry: WaveguideGeometry
         Geometry of output port.
+	input_taper_len: float
+		Length of input taper
+	output_taper_len: float
+		Length of output taper
 
     Notes
     -----
