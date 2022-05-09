@@ -501,7 +501,7 @@ class Router:
         for cell in lib.cells:
             for poly in cell.get_polygons():
                 if bbox is not None and not utils.bbox_overlap(
-                    bbox, tuple([t for tup in poly.bounding_box() for t in tup])
+                    bbox, tuple(t for tup in poly.bounding_box() for t in tup)
                 ):
                     continue
 

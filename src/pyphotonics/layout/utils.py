@@ -110,12 +110,11 @@ def get_perpendicular_directions(port1, port2):
     dy = port2.y - port1.y
     if dx >= 0 and dy >= 0:
         return [(0, np.pi / 2), (np.pi / 2, 0)]
-    if dx < 0 and dy >= 0:
+    if dy >= 0:
         return [(np.pi, np.pi / 2), (np.pi / 2, np.pi)]
-    if dx < 0 and dy < 0:
+    if dx < 0:
         return [(np.pi, -np.pi / 2), (-np.pi / 2, np.pi)]
-    if dx >= 0 and dy < 0:
-        return [(0, -np.pi / 2), (-np.pi / 2, 0)]
+    return [(0, -np.pi / 2), (-np.pi / 2, 0)]
 
 
 def get_bounding_box(points, padding=0):
