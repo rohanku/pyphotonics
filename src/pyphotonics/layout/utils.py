@@ -148,29 +148,39 @@ def get_port_polygons(ports, l, w):
     polys = []
     for port in ports:
         poly = []
-        poly.append(
-            [port.x - w / 2 * np.sin(port.angle), port.y - w / 2 * np.cos(port.angle)]
-        )
-        poly.append(
-            [port.x + w / 2 * np.sin(port.angle), port.y + w / 2 * np.cos(port.angle)]
-        )
-        poly.append(
-            [
-                port.x + w / 2 * np.sin(port.angle) + l * np.cos(port.angle),
-                port.y + w / 2 * np.cos(port.angle) - l * np.sin(port.angle),
-            ]
-        )
-        poly.append(
-            [
-                port.x + 1.5 * l * np.cos(port.angle),
-                port.y - 1.5 * l * np.sin(port.angle),
-            ]
-        )
-        poly.append(
-            [
-                port.x - w / 2 * np.sin(port.angle) + l * np.cos(port.angle),
-                port.y - w / 2 * np.cos(port.angle) - l * np.sin(port.angle),
-            ]
-        )
+        if port.geometry is None or port.geometry.kind == "slab":
+            poly.extend(
+                [
+                    port.x - w / 2 * np.sin(port.angle),
+                    port.y - w / 2 * np.cos(port.angle),
+                    port.x + w / 2 * np.sin(port.angle),
+                    port.y + w / 2 * np.cos(port.angle),
+                    port.x + w / 2 * np.sin(port.angle) + l * np.cos(port.angle),
+                    port.y + w / 2 * np.cos(port.angle) - l * np.sin(port.angle),
+                    port.x + 1.5 * l * np.cos(port.angle),
+                    port.y - 1.5 * l * np.sin(port.angle),
+                    port.x - w / 2 * np.sin(port.angle) + l * np.cos(port.angle),
+                    port.y - w / 2 * np.cos(port.angle) - l * np.sin(port.angle),
+                ]
+            )
+        elif port.geometry.kind == "ridge":
+            poly.extend(
+                [
+                    port.x - w * np.sin(port.angle),
+                    port.y - w * np.cos(port.angle),
+                    port.x + w * np.sin(port.angle),
+                    port.y + w * np.cos(port.angle),
+                    port.x + w * np.sin(port.angle) + l * np.cos(port.angle),
+                    port.y + w * np.cos(port.angle) - l * np.sin(port.angle),
+                    port.x + w / 2 * np.sin(port.angle) + l * np.cos(port.angle),
+                    port.y + w / 2 * np.cos(port.angle) - l * np.sin(port.angle),
+                    port.x + 1.5 * l * np.cos(port.angle),
+                    port.y - 1.5 * l * np.sin(port.angle),
+                    port.x - w / 2 * np.sin(port.angle) + l * np.cos(port.angle),
+                    port.y - w / 2 * np.cos(port.angle) - l * np.sin(port.angle),
+                    port.x - w * np.sin(port.angle) + l * np.cos(port.angle),
+                    port.y - w * np.cos(port.angle) - l * np.sin(port.angle),
+                ]
+            )
         polys.append(poly)
     return polys

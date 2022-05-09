@@ -15,6 +15,7 @@ Layout
 .. autosummary::
 
    WaveguidePath
+   get_potential_ports
    get_rough_paths
    turn_port_route
    direct_route

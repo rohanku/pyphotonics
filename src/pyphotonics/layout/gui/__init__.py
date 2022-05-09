@@ -1,5 +1,5 @@
 import numpy as np
-import os
+import os, subprocess
 from pyphotonics.layout import utils, routing
 import random
 import string
@@ -38,8 +38,28 @@ class PathingGUI(ttk.Frame):
             gds_to_png_abs_path = os.path.join(
                 os.path.dirname(__file__), "../klayout/gds_to_png.py"
             )
-            rc = os.system(
-                f"klayout -r {gds_to_png_abs_path} -rd current_gds={current_gds} -rd output_path={path} -rd bx1={self.gds_bbox[0]} -rd by1={self.gds_bbox[1]} -rd bx2={self.gds_bbox[2]} -rd by2={self.gds_bbox[3]} -rd w={w} -rd h={h}"
+            rc = subprocess.call(
+                [
+                    "klayout",
+                    "-r",
+                    gds_to_png_abs_path,
+                    "-rd",
+                    f"current_gds={current_gds}",
+                    "-rd",
+                    f"output_path={path}",
+                    "-rd",
+                    f"bx1={self.gds_bbox[0]}",
+                    "-rd",
+                    f"by1={self.gds_bbox[1]}",
+                    "-rd",
+                    f"bx2={self.gds_bbox[2]}",
+                    "-rd",
+                    f"by2={self.gds_bbox[3]}",
+                    "-rd",
+                    f"w={w}",
+                    "-rd",
+                    f"h={h}",
+                ]
             )
             if rc == 0:
                 try:
@@ -50,7 +70,7 @@ class PathingGUI(ttk.Frame):
                     )
             else:
                 print(
-                    "Failed to run klayout binary, continuing without backgroudn image. Make sure klayout has been added to path in order to view an image of the GDS in the waveguide editor"
+                    "Failed to run klayout binary, continuing without background image. Make sure klayout has been added to path in order to view an image of the GDS in the waveguide editor"
                 )
 
         ttk.Frame.__init__(self, master=mainframe)
@@ -149,8 +169,8 @@ class PathingGUI(ttk.Frame):
 
         # Bind events to the Canvas
         self.canvas.bind("<Configure>", self.show_image)
-        self.canvas.bind("<ButtonPress-3>", self.move_from) # Panning
-        self.canvas.bind("<B3-Motion>", self.move_to) # Panning
+        self.canvas.bind("<ButtonPress-3>", self.move_from)  # Panning
+        self.canvas.bind("<B3-Motion>", self.move_to)  # Panning
         self.canvas.bind("<MouseWheel>", self.wheel)  # Scroll for Windows and MacOS
         self.canvas.bind("<Button-5>", self.wheel)  # Scroll down for Linux
         self.canvas.bind("<Button-4>", self.wheel)  # Scroll up for Linux
@@ -162,7 +182,7 @@ class PathingGUI(ttk.Frame):
         self.png_inputs = self.get_png_ports(inputs)
         self.input_rects = list(
             map(
-                lambda x: self.canvas.create_polygon(*x, fill=self.deselected_color),
+                lambda x: self.canvas.create_polygon(x, fill=self.deselected_color),
                 utils.get_port_polygons(
                     self.png_inputs, self.port_length, self.port_width
                 ),
@@ -172,7 +192,7 @@ class PathingGUI(ttk.Frame):
         self.png_outputs = self.get_png_ports(outputs)
         self.output_rects = list(
             map(
-                lambda x: self.canvas.create_polygon(*x, fill=self.deselected_color),
+                lambda x: self.canvas.create_polygon(x, fill=self.deselected_color),
                 utils.get_port_polygons(
                     self.png_outputs, -self.port_length, self.port_width
                 ),
@@ -182,7 +202,7 @@ class PathingGUI(ttk.Frame):
         self.png_potential_ports = self.get_png_ports(potential_ports)
         self.potential_port_markers = list(
             map(
-                lambda x: self.canvas.create_polygon(*x, fill=self.potential_color),
+                lambda x: self.canvas.create_polygon(x, fill=self.potential_color),
                 utils.get_port_polygons(
                     self.png_potential_ports, self.port_length, self.port_width
                 ),
@@ -202,9 +222,7 @@ class PathingGUI(ttk.Frame):
         toolbar = Frame(self.master, relief=RAISED)
 
         # Path selection variables
-        self.selected_path_index = (
-            0  # Index of selected option for addressing various arrays, equal to self.N if in Add Path mode
-        )
+        self.selected_path_index = 0  # Index of selected option for addressing various arrays, equal to self.N if in Add Path mode
         self.current_paths = [
             [utils.get_port_coords(self.png_inputs[i])] for i in range(self.N)
         ] + [
@@ -212,10 +230,14 @@ class PathingGUI(ttk.Frame):
         ]  # List of current coordinates for each path, defaults to just those of the input port. Starts as an empty list for index self.N, corresponding to Add Path mode
 
         self.max_undos = 10
-        self.undo_paths = [] # Stored paths for undoing
-        self.undo_terminated = [] # Stored information about whether paths were terminated
-        self.redo_paths = [] # Stored paths for redoing
-        self.redo_terminated = [] # Stored information about whether paths were terminated
+        self.undo_paths = []  # Stored paths for undoing
+        self.undo_terminated = (
+            []
+        )  # Stored information about whether paths were terminated
+        self.redo_paths = []  # Stored paths for redoing
+        self.redo_terminated = (
+            []
+        )  # Stored information about whether paths were terminated
         self.path_lines = [None] * (
             self.N + 1
         )  # Tkinter Canvas object IDs of lines representing current paths
@@ -523,9 +545,7 @@ class PathingGUI(ttk.Frame):
         self.input_rects.extend(
             list(
                 map(
-                    lambda x: self.canvas.create_polygon(
-                        *x, fill=self.deselected_color
-                    ),
+                    lambda x: self.canvas.create_polygon(x, fill=self.deselected_color),
                     utils.get_port_polygons(
                         [self.png_inputs[-1]], self.port_length, self.port_width
                     ),
@@ -545,9 +565,7 @@ class PathingGUI(ttk.Frame):
         self.output_rects.extend(
             list(
                 map(
-                    lambda x: self.canvas.create_polygon(
-                        *x, fill=self.deselected_color
-                    ),
+                    lambda x: self.canvas.create_polygon(x, fill=self.deselected_color),
                     utils.get_port_polygons(
                         [self.png_outputs[-1]], -self.port_length, self.port_width
                     ),
@@ -567,9 +585,7 @@ class PathingGUI(ttk.Frame):
         self.potential_port_markers.extend(
             list(
                 map(
-                    lambda x: self.canvas.create_polygon(
-                        *x, fill=self.potential_color
-                    ),
+                    lambda x: self.canvas.create_polygon(x, fill=self.potential_color),
                     utils.get_port_polygons(
                         [self.potential_ports[-1]], -self.port_length, self.port_width
                     ),
@@ -599,7 +615,7 @@ class PathingGUI(ttk.Frame):
         if self.selected_path_index == self.N:
             return
 
-        self.select_path(self.paths(max(0, self.selected_path-1)))
+        self.select_path(self.paths(max(0, self.selected_path - 1)))
 
     def clear_by_index(self, index):
         """Clear the current path for the given index"""
@@ -806,7 +822,9 @@ class PathingGUI(ttk.Frame):
     def get_png_port(self, port):
         """Convert a single port's GDS coordinates to coordinates on the canvas"""
         png_coords = self.get_png_coords(utils.get_port_coords(port))
-        return routing.Port(png_coords[0], png_coords[1], port.angle)
+        return routing.Port(
+            png_coords[0], png_coords[1], port.angle, geometry=port.geometry
+        )
 
     def get_png_ports(self, ports):
         """Convert port GDS coordinates to coordinates on the canvas"""
