@@ -614,7 +614,7 @@ class PathingGUI(ttk.Frame):
         """Clear the current path for the given index"""
         if index < self.N:
             self.current_paths[index] = [
-                utils.get_port_coords(self.png_inputs[self.selected_path_index])
+                utils.get_port_coords(self.png_inputs[index])
             ]
             self.canvas.delete(self.path_lines[index])
             self.path_lines[index] = None
