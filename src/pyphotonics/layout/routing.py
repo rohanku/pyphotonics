@@ -365,72 +365,80 @@ class Router:
         end : numpy tuple
             Coordinate of midpoint of end of taper.
         """
+        if np.isclose(input_geometry.width, output_geometry.width):
+            # Return no taper if widths are already aligned
+            return None, None, start
 
         # General differential equation for adiabatic taper: https://opg.optica.org/prj/fulltext.cfm?uri=prj-2-3-A41&id=284545
         def adiabatic_taper_func(t, y):
-            return np.tan(self.alpha * self.wavelength / 4 / y / self.n_core)
+            return np.tan(np.clip(self.alpha * self.wavelength / 4 / y / self.n_core, 0, np.pi/2 * 0.8))
 
-        # Differential equation for tapering up to ridge waveguide
-        def slab_to_ridge_func(t, y):
-            return (
-                adiabatic_taper_func(t, y)
-                if input_geometry.width <= 2 * y <= output_geometry.width
-                else 0
-            )
+        # Differential equation for tapering up waveguide width
+        def outward_taper_func(t, y):
+            return adiabatic_taper_func(t, y)
 
-        # Differential equation for tapering up to ridge waveguide
-        def ridge_to_slab_func(t, y):
-            return (
-                -adiabatic_taper_func(t, y)
-                if input_geometry.width >= 2 * y >= output_geometry.width
-                else 0
-            )
+        # Differential equation for tapering down waveguide width
+        def inward_taper_func(t, y):
+            return -adiabatic_taper_func(t, y)
 
         # Terminate differential equation solver once waveguide reaches desired width
         def termination_event(t, y):
             return y[0] - output_geometry.width / 2
         termination_event.terminal = True
 
+        taper_func = inward_taper_func if input_geometry.width > output_geometry.width else outward_taper_func
+        # Choose conservative time span using minimum derivative
+        t_span = (
+            0,
+            abs((input_geometry.width - output_geometry.width)
+            / taper_func(0, max(input_geometry.width, output_geometry.width) / 2)
+            / 2),
+        )
+        # Solve initial value problem to generate taper geometry
+        sol = solve_ivp(
+            taper_func,
+            t_span,
+            [input_geometry.width / 2],
+            events=termination_event,
+            max_step=t_span[1]/100,
+        )
+        sol_y = sol.y.flatten()
+        sol_y[-1] = output_geometry.width / 2
+
+        # Generate taper ridge
+        dir_vec = np.array([np.cos(angle), np.sin(angle)])
+        perp_vec = utils.perp(dir_vec)
+        poly2 = None
         if (
             input_geometry.kind == "slab"
             and output_geometry.kind == "ridge"
             and input_geometry.width == output_geometry.ridge_width
         ):
-            # Choose conservative time span using minimum derivative
-            t_span = (
-                0,
-                (output_geometry.width - input_geometry.width)
-                / slab_to_ridge_func(0, output_geometry.width / 2)
-                / 2,
-            )
-            # Solve initial value problem to generate taper geometry
-            sol = solve_ivp(
-                slab_to_ridge_func,
-                t_span,
-                [input_geometry.width / 2],
-                events=termination_event,
-                max_step=t_span[1] / 100,
-            )
+            poly2 = [
+                start + input_geometry.width / 2 * perp_vec,
+                start - input_geometry.width / 2 * perp_vec,
+                start - input_geometry.width / 2 * perp_vec + sol.t[-1] * dir_vec,
+                start + input_geometry.width / 2 * perp_vec + sol.t[-1] * dir_vec,
+            ]
         elif (
             input_geometry.kind == "ridge"
             and output_geometry.kind == "slab"
             and input_geometry.ridge_width == output_geometry.width
         ):
-            # Choose conservative time span using minimum derivative
-            t_span = (
-                0,
-                (input_geometry.width - output_geometry.width)
-                / ridge_to_slab_func(0, input_geometry.width / 2)
-                / 2,
-            )
-            # Solve initial value problem to generate taper geometry
-            sol = solve_ivp(
-                ridge_to_slab_func,
-                t_span,
-                [input_geometry.width / 2],
-                events=termination_event,
-                max_step=t_span[1] / 100,
-            )
+            poly2 = [
+                start + output_geometry.width / 2 * perp_vec,
+                start - output_geometry.width / 2 * perp_vec,
+                start - output_geometry.width / 2 * perp_vec + sol.t[-1] * dir_vec,
+                start + output_geometry.width / 2 * perp_vec + sol.t[-1] * dir_vec,
+            ]
+        elif input_geometry.kind == output_geometry.kind:
+            if input_geometry.kind == "ridge" and input_geometry.ridge_width == output_geometry.ridge_width:
+                poly2 = [
+                    start + input_geometry.ridge_width / 2 * perp_vec,
+                    start - input_geometry.ridge_width / 2 * perp_vec,
+                    start - input_geometry.ridge_width / 2 * perp_vec + sol.t[-1] * dir_vec,
+                    start + input_geometry.ridge_width / 2 * perp_vec + sol.t[-1] * dir_vec,
+                ]
         else:
             # Return no taper for other geometries
             return None, None, start
@@ -440,26 +448,16 @@ class Router:
             [[np.cos(angle), -np.sin(angle)], [np.sin(angle), np.cos(angle)]]
         )
         # Convert solution to list of (x, y) coordinates and add in other side of taper
-        poly1 = list(map(lambda x: np.array(x), zip(sol.t, sol.y.flatten())))
+        poly1 = list(map(lambda x: np.array(x), zip(sol.t, sol_y)))
         poly1 = list(
             map(
                 lambda x: rot_matrix @ x + start,
                 poly1 + list(map(lambda x: (x[0], -x[1]), poly1))[::-1],
             )
         )
-
-        # Generate taper ridge
-        dir_vec = np.array([np.cos(angle), np.sin(angle)])
-        perp_vec = utils.perp(dir_vec)
-        poly2 = [
-            start + input_geometry.width / 2 * perp_vec,
-            start - input_geometry.width / 2 * perp_vec,
-            start - input_geometry.width / 2 * perp_vec + sol.t[-1] * dir_vec,
-            start + input_geometry.width / 2 * perp_vec + sol.t[-1] * dir_vec,
-        ]
         return poly1, poly2, start + sol.t[-1] * dir_vec
 
-    def get_potential_ports(self, gds, geometry, bbox=None):
+    def get_potential_ports(self, gds, geometries, bbox=None):
         """
         Finds potential ports in the provided GDS file using the geometry of the connecting waveguides.
 
@@ -467,7 +465,7 @@ class Router:
         ----------
         gds : str
             Path to the GDS for which the routes are being generated.
-        geometry: WaveguideGeometry
+        geometries: list[WaveguideGeometry]
             Geometry of waveguide connecting ports.
         bbox: 4-tuple
             (x0, y0, x1, y1) tuple where (x0, y0) and (x1, y1) are the bottom-left and top-right corners, respectively, of the area in which to look for ports.
@@ -479,13 +477,68 @@ class Router:
         """
         lib = gdstk.read_gds(gds)
         potential_ports = set()
-        slab_geometry = WaveguideGeometry(geometry.ridge_width)
-        if geometry.kind == "ridge":
+        for geometry in geometries:
+            slab_geometry = WaveguideGeometry(geometry.ridge_width)
+            if geometry.kind == "ridge":
+                for cell in lib.cells:
+                    for poly in cell.get_polygons():
+                        # Consider only polygons that overlap with the desired bounding box
+                        if bbox is not None and not utils.bbox_overlap(
+                            bbox, tuple([t for tup in poly.bounding_box() for t in tup])
+                        ):
+                            continue
+
+                        N = len(poly.points)
+                        for i in range(N):
+                            # Consider only potential ports that lie within the desired bounding box
+                            midpoint = (poly.points[i] + poly.points[(i + 1) % N]) / 2
+                            if bbox is not None and not utils.in_bbox(
+                                bbox, midpoint[0], midpoint[1]
+                            ):
+                                continue
+
+                            # Find ports that match the ridge width of the desired geometry
+                            edge_len = utils.euclidean_distance(
+                                poly.points[i], poly.points[(i + 1) % N]
+                            )
+                            if np.isclose(edge_len, geometry.ridge_width):
+                                v = utils.perp(poly.points[(i + 1) % N] - poly.points[i])
+                                first_ccw = (
+                                    utils.path_angle(
+                                        poly.points[i - 1],
+                                        poly.points[i],
+                                        poly.points[(i + 1) % N],
+                                    )
+                                    >= 0
+                                )
+                                second_ccw = (
+                                    utils.path_angle(
+                                        poly.points[i],
+                                        poly.points[(i + 1) % N],
+                                        poly.points[(i + 2) % N],
+                                    )
+                                    >= 0
+                                )
+
+                                # Determine direction of perpendicular vector
+                                if first_ccw != second_ccw:
+                                    continue
+                                if first_ccw and second_ccw:
+                                    v = -v
+
+                                port = Port(
+                                    midpoint[0],
+                                    midpoint[1],
+                                    utils.horizontal_angle(v),
+                                    geometry=slab_geometry,
+                                )
+                                potential_ports.add(port)
+
             for cell in lib.cells:
                 for poly in cell.get_polygons():
                     # Consider only polygons that overlap with the desired bounding box
                     if bbox is not None and not utils.bbox_overlap(
-                        bbox, tuple([t for tup in poly.bounding_box() for t in tup])
+                        bbox, tuple(t for tup in poly.bounding_box() for t in tup)
                     ):
                         continue
 
@@ -498,11 +551,11 @@ class Router:
                         ):
                             continue
 
-                        # Find ports that match the ridge width of the desired geometry
+                        # Find ports that match the full width of the desired geometry
                         edge_len = utils.euclidean_distance(
                             poly.points[i], poly.points[(i + 1) % N]
                         )
-                        if np.isclose(edge_len, geometry.ridge_width):
+                        if np.isclose(edge_len, geometry.width, atol=1e-2):
                             v = utils.perp(poly.points[(i + 1) % N] - poly.points[i])
                             first_ccw = (
                                 utils.path_angle(
@@ -531,69 +584,15 @@ class Router:
                                 midpoint[0],
                                 midpoint[1],
                                 utils.horizontal_angle(v),
-                                geometry=slab_geometry,
+                                geometry=geometry,
                             )
-                            potential_ports.add(port)
 
-        for cell in lib.cells:
-            for poly in cell.get_polygons():
-                # Consider only polygons that overlap with the desired bounding box
-                if bbox is not None and not utils.bbox_overlap(
-                    bbox, tuple(t for tup in poly.bounding_box() for t in tup)
-                ):
-                    continue
-
-                N = len(poly.points)
-                for i in range(N):
-                    # Consider only potential ports that lie within the desired bounding box
-                    midpoint = (poly.points[i] + poly.points[(i + 1) % N]) / 2
-                    if bbox is not None and not utils.in_bbox(
-                        bbox, midpoint[0], midpoint[1]
-                    ):
-                        continue
-
-                    # Find ports that match the full width of the desired geometry
-                    edge_len = utils.euclidean_distance(
-                        poly.points[i], poly.points[(i + 1) % N]
-                    )
-                    if np.isclose(edge_len, geometry.width):
-                        v = utils.perp(poly.points[(i + 1) % N] - poly.points[i])
-                        first_ccw = (
-                            utils.path_angle(
-                                poly.points[i - 1],
-                                poly.points[i],
-                                poly.points[(i + 1) % N],
-                            )
-                            >= 0
-                        )
-                        second_ccw = (
-                            utils.path_angle(
-                                poly.points[i],
-                                poly.points[(i + 1) % N],
-                                poly.points[(i + 2) % N],
-                            )
-                            >= 0
-                        )
-
-                        # Determine direction of perpendicular vector
-                        if first_ccw != second_ccw:
-                            continue
-                        if first_ccw and second_ccw:
-                            v = -v
-
-                        port = Port(
-                            midpoint[0],
-                            midpoint[1],
-                            utils.horizontal_angle(v),
-                            geometry=geometry,
-                        )
-
-                        if geometry.kind == 'slab':
-                            potential_ports.add(port)
-                        elif port in potential_ports:
-                            # Reinsert port with ridge geometry instead of slab
-                            potential_ports.remove(port)
-                            potential_ports.add(port)
+                            if geometry.kind == 'slab':
+                                potential_ports.add(port)
+                            elif port in potential_ports:
+                                # Reinsert port with ridge geometry instead of slab
+                                potential_ports.remove(port)
+                                potential_ports.add(port)
 
         final_ports = set()
         for port in potential_ports:
@@ -609,7 +608,7 @@ class Router:
         inputs=[],
         outputs=[],
         bbox=None,
-        geometry=None,
+        geometries=None,
         route_file=None,
         current_gds=None,
     ):
@@ -624,7 +623,7 @@ class Router:
             List of output ports.
         bbox : 4-tuple
             (x0, y0, x1, y1) tuple where (x0, y0) and (x1, y1) are the bottom-left and top-right corners, respectively, of the area in which the paths will be found. Automatically calculated from provided inputs and outputs unless explicitly specified.
-        geometry : WaveguideGeometry
+        geometries : list[WaveguideGeometry]
             If provided, allows the GUI to detect unspecified potential ports.
         route_file : str
             Path to a .route file with the desired initial paths.
@@ -653,7 +652,7 @@ class Router:
                 padding=500,
             )
         potential_ports = []
-        if not route_file and geometry is not None:
+        if not route_file and geometries is not None:
             potential_ports = (
                 []
                 if current_gds is None
@@ -661,7 +660,7 @@ class Router:
                     filter(
                         lambda x: x not in inputs
                         and utils.reverse_port(x) not in outputs,
-                        self.get_potential_ports(current_gds, geometry, bbox=bbox),
+                        self.get_potential_ports(current_gds, geometries, bbox=bbox),
                     )
                 )
             )
@@ -840,6 +839,7 @@ class Router:
         bbox=None,
         route_file=None,
         current_gds=None,
+        port_geometries=[],
     ):
         """
         Returns a user specified route that has been modified to fit the given specifications. Opens a routing GUI if necessary to allow for user input.
@@ -858,6 +858,8 @@ class Router:
             Path to a .route file with the desired initial paths.
         current_gds : str
             Path to the GDS for which the routes are being generated.
+        port_geometries : list[WaveguideGeometry]
+            Additional geometries of ports if they differ from the routing waveguide geometry
 
         Returns
         -------
@@ -875,7 +877,7 @@ class Router:
             inputs=inputs,
             outputs=outputs,
             bbox=bbox,
-            geometry=geometry,
+            geometries=[geometry]+port_geometries,
             route_file=route_file,
             current_gds=current_gds,
         )
@@ -1004,7 +1006,8 @@ class Router:
                                 path.output_taper_poly2, layer=layer2, datatype=datatype
                             )
                             cell.add(p)
-                    gds_segments.append((curr_point, path.output_taper_end))
+                    if not np.isclose(utils.euclidean_distance(curr_point, path.output_taper_end), 0, atol=1e-3):
+                        gds_segments.append((curr_point, path.output_taper_end))
                 else:
                     angle = utils.path_angle(points[i], points[i + 1], points[i + 2])
                     interior_angle = np.pi - np.abs(angle)
@@ -1015,11 +1018,13 @@ class Router:
                     )
                     horiz_angle = utils.horizontal_angle(points[i + 1] - points[i])
 
+                    
                     prev_point = np.copy(curr_point)
                     curr_point += (
                         segment_len - prev_tangent_len - new_tangent_len
                     ) * np.array([np.cos(horiz_angle), np.sin(horiz_angle)])
-                    gds_segments.append((prev_point, curr_point))
+                    if not np.isclose(utils.euclidean_distance(prev_point, curr_point), 0, atol=1e-3):
+                        gds_segments.append((prev_point, curr_point))
 
                     start_angle = horiz_angle - np.pi / 2
                     if angle < 0:

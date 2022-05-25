@@ -187,7 +187,7 @@ class PathingGUI(ttk.Frame):
         self.input_rects = list(
             map(
                 lambda x: self.canvas.create_polygon(x, fill=self.deselected_color),
-                utils.get_port_polygons(
+                self.get_port_polygons(
                     self.png_inputs, self.port_length, self.port_width
                 ),
             )
@@ -197,7 +197,7 @@ class PathingGUI(ttk.Frame):
         self.output_rects = list(
             map(
                 lambda x: self.canvas.create_polygon(x, fill=self.deselected_color),
-                utils.get_port_polygons(
+                self.get_port_polygons(
                     self.png_outputs, -self.port_length, self.port_width
                 ),
             )
@@ -207,7 +207,7 @@ class PathingGUI(ttk.Frame):
         self.potential_port_markers = list(
             map(
                 lambda x: self.canvas.create_polygon(x, fill=self.potential_color),
-                utils.get_port_polygons(
+                self.get_port_polygons(
                     self.png_potential_ports, self.port_length, self.port_width
                 ),
             )
@@ -547,7 +547,7 @@ class PathingGUI(ttk.Frame):
             list(
                 map(
                     lambda x: self.canvas.create_polygon(x, fill=self.deselected_color),
-                    utils.get_port_polygons(
+                    self.get_port_polygons(
                         [self.png_inputs[-1]], self.port_length, self.port_width
                     ),
                 )
@@ -567,7 +567,7 @@ class PathingGUI(ttk.Frame):
             list(
                 map(
                     lambda x: self.canvas.create_polygon(x, fill=self.deselected_color),
-                    utils.get_port_polygons(
+                    self.get_port_polygons(
                         [self.png_outputs[-1]], -self.port_length, self.port_width
                     ),
                 )
@@ -587,7 +587,7 @@ class PathingGUI(ttk.Frame):
             list(
                 map(
                     lambda x: self.canvas.create_polygon(x, fill=self.potential_color),
-                    utils.get_port_polygons(
+                    self.get_port_polygons(
                         [self.png_potential_ports[-1]], -self.port_length, self.port_width
                     ),
                 )
@@ -869,3 +869,48 @@ class PathingGUI(ttk.Frame):
             self.gds_bbox[3] - self.gds_bbox[1]
         ) + self.gds_bbox[1]
         return np.array([x, y])
+
+    def get_port_polygons(self, ports, l, w):
+        """Returns polygon outlines for port markers used in the GUI"""
+        polys = []
+        for port in ports:
+            poly = []
+            if port.geometry is None or port.geometry.kind == "slab":
+                poly.extend(
+                    [
+                        port.x - w / 2 * np.sin(port.angle),
+                        port.y - w / 2 * np.cos(port.angle),
+                        port.x + w / 2 * np.sin(port.angle),
+                        port.y + w / 2 * np.cos(port.angle),
+                        port.x + w / 2 * np.sin(port.angle) + l * np.cos(port.angle),
+                        port.y + w / 2 * np.cos(port.angle) - l * np.sin(port.angle),
+                        port.x + 1.5 * l * np.cos(port.angle),
+                        port.y - 1.5 * l * np.sin(port.angle),
+                        port.x - w / 2 * np.sin(port.angle) + l * np.cos(port.angle),
+                        port.y - w / 2 * np.cos(port.angle) - l * np.sin(port.angle),
+                    ]
+                )
+            elif port.geometry.kind == "ridge":
+                poly.extend(
+                    [
+                        port.x - w * np.sin(port.angle),
+                        port.y - w * np.cos(port.angle),
+                        port.x + w * np.sin(port.angle),
+                        port.y + w * np.cos(port.angle),
+                        port.x + w * np.sin(port.angle) + l * np.cos(port.angle),
+                        port.y + w * np.cos(port.angle) - l * np.sin(port.angle),
+                        port.x + w / 2 * np.sin(port.angle) + l * np.cos(port.angle),
+                        port.y + w / 2 * np.cos(port.angle) - l * np.sin(port.angle),
+                        port.x + 1.5 * l * np.cos(port.angle),
+                        port.y - 1.5 * l * np.sin(port.angle),
+                        port.x - w / 2 * np.sin(port.angle) + l * np.cos(port.angle),
+                        port.y - w / 2 * np.cos(port.angle) - l * np.sin(port.angle),
+                        port.x - w * np.sin(port.angle) + l * np.cos(port.angle),
+                        port.y - w * np.cos(port.angle) - l * np.sin(port.angle),
+                    ]
+                )
+            for i in range(len(poly)//2):
+                coords = self.get_zoom_coords(np.array([poly[2*i], poly[2*i+1]]))
+                poly[2*i], poly[2*i+1] = coords[0], coords[1]
+            polys.append(poly)
+        return polys
