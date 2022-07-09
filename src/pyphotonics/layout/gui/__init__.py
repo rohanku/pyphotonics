@@ -588,7 +588,7 @@ class PathingGUI(ttk.Frame):
                 map(
                     lambda x: self.canvas.create_polygon(x, fill=self.potential_color),
                     self.get_port_polygons(
-                        [self.png_potential_ports[-1]], -self.port_length, self.port_width
+                        [self.png_potential_ports[-1]], self.port_length, self.port_width
                     ),
                 )
             )
