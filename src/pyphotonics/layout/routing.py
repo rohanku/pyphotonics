@@ -863,7 +863,7 @@ class Router:
 
         Returns
         -------
-        paths : WaveguidePath
+        paths : list[WaveguidePath]
             WaveguidePaths between each input and output port.
         """
 

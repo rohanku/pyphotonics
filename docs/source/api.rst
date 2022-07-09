@@ -15,8 +15,11 @@ Layout
 .. autosummary::
 
    WaveguideGeometry
+
    Port
+
    WaveguidePath
+
    Router
 
   
