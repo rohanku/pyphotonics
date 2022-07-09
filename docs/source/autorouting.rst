@@ -121,3 +121,40 @@ We then get the following screen, with potential ports highlighted in red.
 We can then click on the desired port to begin a path, click to place points along the path, and then click on another port to complete the path. Once the path is completed, it will be added to the list of paths and can be redrawn between the same two ports as necessary. Additional paths can be added by selecting "Add Path" in the path selection dropdown, hitting ``Shift+A``, or selecting :menuselection:`Edit --> Add Path`. Once the desired paths are added, we can the steps outlined earlier to finish autorouting.
 
 .. image:: _static/add_path_2.png
+
+Additional Port Geometries and Tapers
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Sometimes, waveguides must connect ports with different geometries. If these port geometries are specified, Pyphotonics can automatically detect these additional ports and create the necessary tapers to connect them to the desired waveguide routes.
+
+Specifically, Pyphotonics creates adiabatic tapers according to the process outlined by `Fu et al. <https://opg.optica.org/prj/abstract.cfm?uri=prj-2-3-a41>`_ to convert any given port geometry into that of the connecting waveguide.
+
+For example, suppose we wanted to route the input waveguides of this planar lens to a fiber grating array, as shown below.
+
+.. image:: _static/lens_coupler.png
+
+The input waveguides are 4 um wide slabs, while the fiber inputs and connecting waveguides are 800 nm wide slabs. We can utilize Pyphotonics to automatically taper down the input waveguides of the lens and connect them to the fiber gratings with the following code:
+
+.. code-block::
+
+  from pyphotonics.layout.routing import Router, Port, WaveguideGeometry
+
+  router = Router(wavelength=1.55)
+
+  waveguides = router.user_route(
+      WaveguideGeometry(0.8),
+      [50, 62.5],
+      bbox=(-4900, 20, -2741, 2500),
+      current_gds="/Users/rohan/Downloads/lenses.GDS",
+      port_geometries=[WaveguideGeometry(4)],
+  )
+
+  router.write_paths_to_gds(waveguides, "/Users/rohan/photonics/presentation/lenses_routes.gds", layer=2)
+
+By specifying the optional ``port_geometries`` argument in :meth:`user_route`, we can automatically detect the 4 um wide input ports to the lens, and route them as normal with the GUI.
+
+.. image:: _static/lens_route_gui.png
+
+Running the autorouting script and copying over the generated routes, we get the result below.
+
+.. image:: _static/lens_routed.png

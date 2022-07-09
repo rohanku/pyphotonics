@@ -859,7 +859,7 @@ class Router:
         current_gds : str
             Path to the GDS for which the routes are being generated.
         port_geometries : list[WaveguideGeometry]
-            Additional geometries of ports if they differ from the routing waveguide geometry
+            Additional geometries of ports if they differ from the routing waveguide geometry.
 
         Returns
         -------
